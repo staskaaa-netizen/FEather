@@ -289,7 +289,7 @@
       </div>
       <div class="status-strip" aria-live="polite">
         <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
-        <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC directory responder offline</span>
+        <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC FE1 server offline</span>
       </div>
     </header>
 
@@ -342,7 +342,7 @@
         <section class="panel" aria-labelledby="monitorHeading">
           <div class="panel-head">
             <h2 id="monitorHeading">Transfer monitor</h2>
-            <span id="protocolState" class="log-meta">FE1 NOT IMPLEMENTED</span>
+            <span id="protocolState" class="log-meta">FE1 SERVER OFFLINE</span>
           </div>
           <div class="panel-body">
             <div class="metric-grid">
@@ -364,7 +364,7 @@
               </div>
               <div class="metric">
                 <span>Current program</span>
-                <strong>—</strong>
+                <strong id="currentProgram">—</strong>
               </div>
               <div class="metric">
                 <span>Last activity</span>
@@ -372,7 +372,7 @@
               </div>
             </div>
             <p class="notice" id="transferNotice">
-              Raw transport milestone only. Manual TX is locked while a future FE1 transfer is active.
+              FE1 directory and selected-program retrieval are active. Manual TX is locked during a file transfer.
             </p>
           </div>
         </section>
@@ -438,6 +438,7 @@
 
   <script src="src/diagnostics.js"></script>
   <script src="src/transport.js"></script>
+  <script src="src/nc-data.js"></script>
   <script src="src/fe1.js"></script>
   <script src="src/app.js"></script>
 </body>

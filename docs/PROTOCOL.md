@@ -46,6 +46,21 @@ The live TNC displayed `100.H` for `H100`, then replied `<EOT>` (`0x04`). This c
 
 The full eight-file response was then accepted and displayed by the TNC.
 
+## Implemented selected-file retrieval
+
+The TNC's BCC-protected selected-file request is followed by:
+
+1. Browser sends `<ACK>`.
+2. Browser sends one program line as `<STX> line text <ETB> BCC <DC1>`.
+3. TNC replies `<ACK>` for each valid line.
+4. Browser re-sends the same block after `<NAK>` or ACK timeout.
+5. After the last line is acknowledged, browser sends `<ETX>`.
+6. TNC replies `<EOT>`.
+
+The BCC is the XOR of every byte from `<STX>` through `<ETB>` inclusive. The same rule applies to the TNC's `<SOH>` header. Example: the captured `HCASEBOTT` header has BCC `0x02`.
+
+The TNC successfully retrieved `CASEBOTT.H` and `CASEBTAP.H` through the browser on 20 October 2026. All line blocks were acknowledged and the final ETX/EOT handshake completed for both programs.
+
 ## Selected-file request captured
 
 After selecting the test program, the TNC sent:
@@ -80,7 +95,6 @@ The final `0x02` occupies the BCC position in this capture. This confirms the PC
 
 - Calculate and validate block BCC for file headers and data blocks.
 - Verify ACK/NAK, DC1/DC3, retry, and timeout transitions using live traces.
-- Serve the selected program body and finish with ETX/EOT.
 - Receive and atomically store files sent by the TNC.
 - Implement IndexedDB-backed file management.
 - Verify the sector-count unit and larger-transfer fragmentation.

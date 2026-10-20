@@ -16,15 +16,18 @@ Implemented behavior includes:
 - A browser lock that prevents two TNCweb tabs from controlling the serial link at the same time.
 - An FE1 plain-text directory responder using the FE401 record format from the TNC technical manual.
 - Live TNC 415 verification of the request, filename mapping, ETX terminator, and EOT acknowledgement.
+- Selected-program retrieval with XOR block-check characters, ACK/NAK handling, bounded retries, and ETX/EOT completion.
 - Browser tests with a simulated transport and scripted mock TNC.
 
-Program retrieval, upload, IndexedDB storage, and interrupted-transfer recovery are not yet claimed. The TNC currently requests a selected program with a BCC-protected header after the directory is displayed.
+Program upload, IndexedDB storage, and interrupted-transfer recovery are not yet claimed.
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 
 A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
 
 The live TNC directory test uses FE401 identifiers such as `H100`, which the TNC displays as `100.H`. The eight sample files are mapped as `H` plus the filename without `.H`.
+
+The TNC successfully retrieved `CASEBOTT.H` and `CASEBTAP.H` from the browser. Every line block was acknowledged, the browser ended with ETX, and the TNC returned EOT.
 
 ## Run locally
 
@@ -49,7 +52,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `23 passed, 0 failed`.
+The expected result is `28 passed, 0 failed`.
 
 ## Documentation
 
@@ -61,4 +64,4 @@ The expected result is `23 passed, 0 failed`.
 
 ## Safety boundary
 
-This build emits only the FE1 directory response automatically. It does not yet serve file contents, acknowledge incoming program blocks, or persist NC files. Do not use it as a production file server until retrieval, upload, storage, and interruption recovery are implemented and verified.
+This build automatically answers FE1 directory and selected-program retrieval requests. It does not yet accept uploaded programs or persist imported files. Do not use it as a production file server until upload, storage, and interruption recovery are implemented and verified.

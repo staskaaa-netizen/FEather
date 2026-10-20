@@ -5,7 +5,11 @@
   const {
     DIRECTORY_REQUEST,
     Fe1DirectoryResponder,
-    buildDirectoryResponse
+    Fe1FileResponder,
+    buildDirectoryResponse,
+    calculateBcc,
+    encodeDataBlock,
+    splitFileLines
   } = global.TNCWeb;
 
   const sampleFiles = [
@@ -60,6 +64,81 @@
     responder.feed(DIRECTORY_REQUEST);
     global.TNCWeb.DIRECTORY_REQUEST_ZERO.forEach((byte) => responder.feed([byte]));
     equal(responses.length, 2);
+  });
+
+  test("FE1 header BCC matches the captured HCASEBOTT request", () => {
+    const block = new TextEncoder().encode(`\x01HCASEBOTTE\x17`);
+    equal(calculateBcc(block), 0x02);
+  });
+
+  test("FE1 file line blocks preserve content and calculate BCC", () => {
+    const lines = splitFileLines(new TextEncoder().encode("0 BEGIN\r\n1 NEXT\r\n"));
+    equal(lines.length, 2);
+    equal(new TextDecoder().decode(lines[0]), "0 BEGIN");
+    equal(new TextDecoder().decode(lines[1]), "1 NEXT");
+    const block = encodeDataBlock(lines[0]);
+    equal(block[0], 0x02);
+    equal(block[block.length - 3], 0x17);
+    equal(block[block.length - 1], 0x11);
+    equal(block[block.length - 2], calculateBcc(block.subarray(0, block.length - 2)));
+  });
+
+  test("FE1 selected-file responder serves lines through ACK, NAK, ETX and EOT", async () => {
+    const file = new TextEncoder().encode("0 BEGIN PGM TEST MM\r\n1 END PGM TEST MM\r\n");
+    const writes = [];
+    const statuses = [];
+    const responder = new Fe1FileResponder({
+      getFile: (identifier) => identifier === "HTEST" ? file : null,
+      onWrite: (bytes) => writes.push(bytes.slice()),
+      onStatus: (status) => statuses.push(status),
+      timeoutMs: 200
+    });
+    const headerBase = new TextEncoder().encode("\x01HTESTE\x17");
+    const header = new Uint8Array(headerBase.length + 1);
+    header.set(headerBase);
+    header[header.length - 1] = calculateBcc(headerBase);
+    responder.feed(header);
+    await global.TNCWebTest.wait(20);
+
+    equal(writes.length, 2);
+    bytesEqual(writes[0], [0x06]);
+    equal(writes[1][0], 0x02);
+    includes(new TextDecoder().decode(writes[1]), "0 BEGIN PGM TEST MM");
+
+    responder.feed([0x06]);
+    equal(writes.length, 3);
+    includes(new TextDecoder().decode(writes[2]), "1 END PGM TEST MM");
+
+    responder.feed([0x15]);
+    equal(writes.length, 4);
+    bytesEqual(writes[3], writes[2]);
+
+    responder.feed([0x06]);
+    equal(writes.length, 5);
+    bytesEqual(writes[4], [0x03]);
+    responder.feed([0x04]);
+    equal(statuses[statuses.length - 1].phase, "complete");
+    equal(responder.phase, "idle");
+  });
+
+  test("FE1 selected-file responder bounds ACK retries", async () => {
+    const errors = [];
+    const responder = new Fe1FileResponder({
+      getFile: () => new TextEncoder().encode("0 TEST\r\n"),
+      onWrite: () => {},
+      onError: (error) => errors.push(error),
+      timeoutMs: 10,
+      maxRetries: 1
+    });
+    const headerBase = new TextEncoder().encode("\x01HTESTE\x17");
+    const header = new Uint8Array(headerBase.length + 1);
+    header.set(headerBase);
+    header[header.length - 1] = calculateBcc(headerBase);
+    responder.feed(header);
+    await global.TNCWebTest.wait(150);
+    equal(errors.length, 1);
+    equal(errors[0].code, "ACK_TIMEOUT");
+    equal(responder.phase, "idle");
   });
 
   test("Multiple coalesced FE1 directory requests receive one response each", () => {

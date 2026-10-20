@@ -4,7 +4,7 @@ Document status: 20 October 2026. Transport and FE1 directory tested on the targ
 
 ## Automated browser tests
 
-Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 23 tests:
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 28 tests:
 
 - Hex parsing, control-character naming, and diagnostic export.
 - Configurable endpoint validation.
@@ -23,6 +23,8 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - Coalesced and unrelated FE1 directory request handling.
 - Minimal single-entry directory response used for live TNC isolation.
 - FE401-type `H100` identifier mapping and the equivalent zero/letter-O request variant.
+- Selected-file BCC validation, line blocking, ACK/NAK retransmission, and ETX/EOT completion.
+- Bundled NC catalog byte lengths and CRLF preservation.
 
 The WebSocket tests use an injected `FakeWebSocket`. The mock TNC responses use synthetic byte sequences. They validate the browser transport and buffering code; they are **not** documented FE1 examples and do not prove TNC compatibility.
 
@@ -89,7 +91,7 @@ Recorded result on 20 October 2026:
 - Full eight-file response was accepted and all eight names were visible.
 - After selection, the TNC requested `H100` with a BCC-protected header.
 
-The selected-file operation remains unimplemented; directory listing is complete for this machine.
+Directory listing is complete for this machine.
 
 ### Stage 5 — Receive a small program
 
@@ -98,6 +100,16 @@ Use a non-production program. Verify the browser does not acknowledge an invalid
 ### Stage 6 — Return the same program
 
 Compare size and BCC at both ends, then byte-compare the stored source and file accepted by the TNC.
+
+Recorded result on 20 October 2026 for `CASEBOTT.H`:
+
+- Directory selection generated `HCASEBOTT` with valid BCC.
+- Browser sent ACK followed by 38 BCC-protected line blocks.
+- TNC acknowledged every block.
+- Browser sent ETX and TNC returned EOT.
+- No NAK or timeout occurred.
+
+The same complete ACK/ETX/EOT sequence also succeeded for `CASEBTAP.H` (26 lines).
 
 ### Stage 7 — Larger files and interruption
 

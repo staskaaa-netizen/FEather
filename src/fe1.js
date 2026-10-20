@@ -199,14 +199,281 @@
     }
   }
 
+  function calculateBcc(value) {
+    const bytes = TNCWeb.copyBytes(value);
+    let bcc = 0;
+    for (const byte of bytes) {
+      bcc ^= byte;
+    }
+    return bcc & 0x7f;
+  }
+
+  function encodeDataBlock(value) {
+    const payload = TNCWeb.copyBytes(value);
+    const block = new Uint8Array(payload.byteLength + 4);
+    block[0] = CONTROL.STX;
+    block.set(payload, 1);
+    block[payload.byteLength + 1] = CONTROL.ETB;
+    block[payload.byteLength + 2] = calculateBcc(block.subarray(0, payload.byteLength + 2));
+    block[payload.byteLength + 3] = CONTROL.DC1;
+    return block;
+  }
+
+  function splitFileLines(value) {
+    const bytes = TNCWeb.copyBytes(value);
+    const lines = [];
+    let lineStart = 0;
+    for (let index = 0; index < bytes.byteLength; index += 1) {
+      if (bytes[index] !== CONTROL.LF) {
+        continue;
+      }
+      const lineEnd = index > lineStart && bytes[index - 1] === CONTROL.CR ? index - 1 : index;
+      lines.push(bytes.slice(lineStart, lineEnd));
+      lineStart = index + 1;
+    }
+    if (lineStart < bytes.byteLength) {
+      lines.push(bytes.slice(lineStart));
+    }
+    return lines;
+  }
+
+  class Fe1FileResponder {
+    constructor(options) {
+      const settings = options || {};
+      this.getFile = settings.getFile || (() => null);
+      this.onWrite = settings.onWrite || (() => {});
+      this.onStatus = settings.onStatus || (() => {});
+      this.onError = settings.onError || (() => {});
+      this.timeoutMs = settings.timeoutMs || 2000;
+      this.maxRetries = settings.maxRetries === undefined ? 3 : settings.maxRetries;
+      this.maxBufferedBytes = settings.maxBufferedBytes || 4096;
+      this.buffer = new Uint8Array(0);
+      this.phase = "idle";
+      this.identifier = "";
+      this.lines = [];
+      this.lineIndex = 0;
+      this.currentBlock = null;
+      this.retries = 0;
+      this.timer = null;
+    }
+
+    feed(value) {
+      const bytes = TNCWeb.copyBytes(value);
+      if (bytes.byteLength === 0) {
+        return [];
+      }
+      this.buffer = concatenate([this.buffer, bytes], this.buffer.byteLength + bytes.byteLength);
+      if (this.phase === "idle") {
+        this._processHeader();
+      } else {
+        this._processTransferBytes();
+      }
+      if (this.buffer.byteLength > this.maxBufferedBytes) {
+        this.buffer = this.buffer.slice(this.buffer.byteLength - this.maxBufferedBytes);
+      }
+      return this.buffer;
+    }
+
+    _processHeader() {
+      const soh = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.SOH]), 0);
+      if (soh === -1) {
+        this.buffer = new Uint8Array(0);
+        return;
+      }
+      if (soh > 0) {
+        this.buffer = this.buffer.slice(soh);
+      }
+      const etb = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.ETB]), 1);
+      if (etb === -1 || this.buffer.byteLength < etb + 2) {
+        return;
+      }
+
+      const expectedBcc = calculateBcc(this.buffer.subarray(0, etb + 1));
+      const receivedBcc = this.buffer[etb + 1];
+      if (expectedBcc !== receivedBcc) {
+        this.onError(TNCWeb.connectionError(
+          `Invalid BCC in selected-file header: expected 0x${expectedBcc.toString(16)}, received 0x${receivedBcc.toString(16)}.`,
+          "HEADER_BCC"
+        ));
+        this.buffer = this.buffer.slice(1);
+        return;
+      }
+
+      const payload = this.buffer.subarray(1, etb);
+      if (payload.byteLength < 2 || payload[payload.byteLength - 1] !== 0x45) {
+        this.buffer = this.buffer.slice(etb + 2);
+        return;
+      }
+      const identifier = new TextDecoder("ascii").decode(payload.subarray(0, payload.byteLength - 1)).trim();
+      const file = this.getFile(identifier);
+      this.buffer = this.buffer.slice(etb + 2);
+      if (this.buffer[0] === CONTROL.DC1) {
+        this.buffer = this.buffer.slice(1);
+      }
+      if (!file) {
+        this.onError(TNCWeb.connectionError(`Program not available: ${identifier}`, "FILE_NOT_FOUND"));
+        return;
+      }
+
+      this.identifier = identifier;
+      this.lines = splitFileLines(file);
+      this.lineIndex = 0;
+      this.retries = 0;
+      this.phase = "starting";
+      this.onStatus({
+        phase: this.phase,
+        identifier,
+        lineIndex: 0,
+        lineCount: this.lines.length
+      });
+
+      this.onWrite(Uint8Array.from([CONTROL.ACK]));
+      this.timer = setTimeout(() => {
+        if (this.phase === "starting") {
+          this._sendNextBlock();
+        }
+      }, 10);
+    }
+
+    _sendNextBlock() {
+      this._clearTimer();
+      if (this.lineIndex >= this.lines.length) {
+        this.phase = "awaiting-eot";
+        this.currentBlock = null;
+        this.onStatus({
+          phase: this.phase,
+          identifier: this.identifier,
+          lineIndex: this.lineIndex,
+          lineCount: this.lines.length,
+          retries: this.retries
+        });
+        this.onWrite(Uint8Array.from([CONTROL.ETX]));
+        this.timer = setTimeout(() => {
+          this._fail(TNCWeb.connectionError("TNC did not acknowledge ETX with EOT.", "EOT_TIMEOUT"));
+        }, this.timeoutMs);
+        return;
+      }
+
+      this.retries = 0;
+      this.phase = "awaiting-ack";
+      this.currentBlock = encodeDataBlock(this.lines[this.lineIndex]);
+      this._writeCurrentBlock();
+    }
+
+    _writeCurrentBlock() {
+      this.onStatus({
+        phase: this.phase,
+        identifier: this.identifier,
+        lineIndex: this.lineIndex + 1,
+        lineCount: this.lines.length,
+        retries: this.retries
+      });
+      this.onWrite(this.currentBlock);
+      this._clearTimer();
+      this.timer = setTimeout(() => {
+        if (this.phase !== "awaiting-ack") {
+          return;
+        }
+        this.retries += 1;
+        if (this.retries > this.maxRetries) {
+          this._fail(TNCWeb.connectionError(
+            `ACK timeout after ${this.maxRetries} retries at line ${this.lineIndex + 1}.`,
+            "ACK_TIMEOUT"
+          ));
+          return;
+        }
+        this._writeCurrentBlock();
+      }, this.timeoutMs);
+    }
+
+    _processTransferBytes() {
+      while (this.buffer.byteLength > 0 && this.phase !== "idle") {
+        const command = this.buffer[0];
+        this.buffer = this.buffer.slice(1);
+
+        if (this.phase === "awaiting-ack") {
+          if (command === CONTROL.ACK) {
+            this._clearTimer();
+            this.lineIndex += 1;
+            this._sendNextBlock();
+            continue;
+          }
+          if (command === CONTROL.NAK) {
+            this._clearTimer();
+            this.retries += 1;
+            if (this.retries > this.maxRetries) {
+              this._fail(TNCWeb.connectionError(
+                `TNC rejected line ${this.lineIndex + 1} after ${this.maxRetries} retries.`,
+                "RETRY_LIMIT"
+              ));
+              return;
+            }
+            this._writeCurrentBlock();
+            continue;
+          }
+        } else if (this.phase === "awaiting-eot" && command === CONTROL.EOT) {
+          this._clearTimer();
+          const complete = {
+            phase: "complete",
+            identifier: this.identifier,
+            lineIndex: this.lines.length,
+            lineCount: this.lines.length
+          };
+          this.phase = "idle";
+          this.onStatus(complete);
+          this.identifier = "";
+          this.lines = [];
+          this.lineIndex = 0;
+          this.currentBlock = null;
+          return;
+        }
+      }
+    }
+
+    _fail(error) {
+      this._clearTimer();
+      this.onError(error);
+      this.onStatus({
+        phase: "failed",
+        identifier: this.identifier,
+        lineIndex: this.lineIndex,
+        lineCount: this.lines.length,
+        error: error.message
+      });
+      this.reset();
+    }
+
+    _clearTimer() {
+      if (this.timer !== null) {
+        clearTimeout(this.timer);
+        this.timer = null;
+      }
+    }
+
+    reset() {
+      this._clearTimer();
+      this.buffer = new Uint8Array(0);
+      this.phase = "idle";
+      this.identifier = "";
+      this.lines = [];
+      this.lineIndex = 0;
+      this.currentBlock = null;
+      this.retries = 0;
+    }
+  }
+
   Object.assign(TNCWeb, {
     CONTROL,
     DIRECTORY_REQUEST,
     DIRECTORY_REQUEST_ZERO,
     Fe1DirectoryResponder,
+    Fe1FileResponder,
     buildDirectoryResponse,
     byteSequenceIndex,
+    calculateBcc,
+    encodeDataBlock,
     formatDirectoryRecord,
+    splitFileLines,
     toFe1DirectoryName
   });
 

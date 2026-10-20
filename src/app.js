@@ -5,23 +5,31 @@
     ByteStreamBuffer,
     DiagnosticLog,
     Fe1DirectoryResponder,
+    Fe1FileResponder,
     WebSocketSerialTransport,
     buildWebSocketEndpoint,
     parseHex,
     toAnnotatedAscii,
+    toFe1DirectoryName,
     toHex
   } = window.TNCWeb;
 
-  const directoryFiles = [
-    { name: "CASEBOTT.H", size: 764 },
-    { name: "CASEBTAP.H", size: 542 },
-    { name: "CASEFSLO.H", size: 892 },
-    { name: "CASEMAIN.H", size: 560 },
-    { name: "CASETAP.H", size: 319 },
-    { name: "CASETOP.H", size: 462 },
-    { name: "CASETOPF.H", size: 340 },
-    { name: "CBERNG37.H", size: 417 }
-  ];
+  const ncCatalog = Array.isArray(window.TNCWeb.NC_FILES) ? window.TNCWeb.NC_FILES : [];
+  const directoryFiles = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
+
+  function decodeBase64(value) {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  const programBytes = new Map(ncCatalog.map((file) => [
+    toFe1DirectoryName(file.name),
+    decodeBase64(file.base64)
+  ]));
 
   const byId = (id) => document.getElementById(id);
   const elements = {
@@ -44,6 +52,7 @@
     lastActivity: byId("lastActivity"),
     error: byId("errorBanner"),
     transferNotice: byId("transferNotice"),
+    currentProgram: byId("currentProgram"),
     sendLockNote: byId("sendLockNote"),
     log: byId("logOutput"),
     logCounter: byId("logCounter"),
@@ -94,6 +103,48 @@
           error: error.message
         });
       }
+    }
+  });
+
+  const fileResponder = new Fe1FileResponder({
+    getFile: (identifier) => programBytes.get(identifier) || null,
+    onWrite: (bytes) => {
+      const transport = session.transport;
+      if (!transport || transport.state !== "open") {
+        throw new Error("W610 transport closed during file retrieval.");
+      }
+      transport.write(bytes);
+    },
+    onStatus: (status) => {
+      if (status.phase === "starting" || status.phase === "awaiting-ack" || status.phase === "awaiting-eot") {
+        setTransferActive(true);
+        elements.currentProgram.textContent = status.identifier;
+        elements.serverIndicator.dataset.state = "active";
+        elements.serverIndicator.textContent = `Serving ${status.identifier}`;
+        elements.protocolState.textContent = `FE1 RETRIEVAL · LINE ${status.lineIndex}/${status.lineCount}`;
+        elements.transferNotice.textContent = `Serving ${status.identifier}: line ${status.lineIndex} of ${status.lineCount}.`;
+      } else if (status.phase === "complete") {
+        setTransferActive(false);
+        elements.currentProgram.textContent = "—";
+        elements.serverIndicator.dataset.state = "active";
+        elements.serverIndicator.textContent = `File served · ${status.identifier}`;
+        elements.protocolState.textContent = "FE1 RETRIEVAL COMPLETE";
+        diagnostics.add("SYSTEM", null, {
+          label: `FE1 retrieval complete: ${status.identifier}, ${status.lineCount} lines`
+        });
+      } else if (status.phase === "failed") {
+        setTransferActive(false);
+        elements.currentProgram.textContent = "—";
+        elements.serverIndicator.textContent = "TNC FE1 server ready";
+        elements.protocolState.textContent = "FE1 RETRIEVAL FAILED";
+      }
+    },
+    onError: (error) => {
+      showError("FE1 file retrieval failed.", error);
+      diagnostics.add("SYSTEM", null, {
+        label: "FE1 file retrieval failed",
+        error: error.message
+      });
     }
   });
 
@@ -278,6 +329,15 @@
       diagnostics.add("RX", bytes, { label: "W610→browser" });
       directoryResponder.feed(bytes);
       try {
+        fileResponder.feed(bytes);
+      } catch (error) {
+        showError("FE1 file responder error.", error);
+        diagnostics.add("SYSTEM", null, {
+          label: "FE1 file responder error",
+          error: error.message
+        });
+      }
+      try {
         receiveBuffer.append(bytes);
       } catch (error) {
         receiveBuffer.clear();
@@ -302,8 +362,8 @@
       } else if (detail.state === "open") {
         setLinkState("open", "W610 link active");
         elements.serverIndicator.dataset.state = "active";
-        elements.serverIndicator.textContent = "TNC directory responder ready";
-        elements.protocolState.textContent = "FE1 DIRECTORY READY - FILE TRANSFER PENDING";
+        elements.serverIndicator.textContent = "TNC FE1 server ready";
+        elements.protocolState.textContent = "FE1 DIRECTORY + FILE RETRIEVAL READY";
         diagnostics.add("SYSTEM", null, { label: `Connected ${transport.url}` });
         clearError();
       } else if (detail.state === "closing") {
@@ -313,7 +373,9 @@
         setLinkState(endedUnexpectedly ? "error" : "inactive", endedUnexpectedly ? "W610 link lost" : "W610 link offline");
         elements.protocolState.textContent = "TRANSPORT CLOSED";
         elements.serverIndicator.dataset.state = "inactive";
-        elements.serverIndicator.textContent = "TNC directory responder offline";
+        elements.serverIndicator.textContent = "TNC FE1 server offline";
+        setTransferActive(false);
+        elements.currentProgram.textContent = "—";
         diagnostics.add("SYSTEM", null, {
           label: endedUnexpectedly ? "Connection lost" : "Disconnected",
           error: detail.reason || (detail.lastError && detail.lastError.message) || ""
@@ -322,6 +384,8 @@
           showError("W610 connection was lost. No automatic reconnect or partial-transfer resume was attempted.");
         }
         receiveBuffer.clear();
+        directoryResponder.reset();
+        fileResponder.reset();
         elements.connect.disabled = false;
         elements.disconnect.disabled = true;
         updateCounters();
@@ -348,6 +412,7 @@
     session.manualDisconnect = false;
     receiveBuffer.clear();
     directoryResponder.reset();
+    fileResponder.reset();
     updateCounters();
 
     try {
@@ -484,6 +549,17 @@
     releaseControllerLock();
   });
 
+  function setTransferActive(value) {
+    session.transferActive = Boolean(value);
+    elements.sendLockNote.textContent = session.transferActive
+      ? "Manual terminal input is locked during the active FE transfer."
+      : "Binary WebSocket frames are used for transmitted bytes. Received text frames are converted as UTF-8 for diagnostics.";
+    elements.transferNotice.textContent = session.transferActive
+      ? "An FE transfer is active. Manual terminal input is locked."
+      : "FE1 directory and selected-program retrieval are ready.";
+    updateCounters();
+  }
+
   elements.origin.textContent = window.location.origin === "null"
     ? "file:// (opaque or browser-defined origin)"
     : window.location.origin;
@@ -493,23 +569,15 @@
     label: "TNCweb Milestone 1 loaded"
   });
   diagnostics.add("SYSTEM", null, {
-    label: "FE1 is not implemented; no directory, upload, or download commands are emitted"
+    label: "FE1 directory and selected-program retrieval are ready"
   });
 
   // Exposed for a future FE1 controller and for the browser test harness.
   window.TNCWebConsole = {
     diagnostics,
+    fileResponder,
     receiveBuffer,
     session,
-    setTransferActive(value) {
-      session.transferActive = Boolean(value);
-      elements.sendLockNote.textContent = session.transferActive
-        ? "Manual terminal input is locked during the active FE transfer."
-        : "Binary WebSocket frames are used for transmitted bytes. Received text frames are converted as UTF-8 for diagnostics.";
-      elements.transferNotice.textContent = session.transferActive
-        ? "An FE transfer is active. Manual terminal input is locked."
-        : "Raw transport milestone only. Manual TX is locked while a future FE1 transfer is active.";
-      updateCounters();
-    }
+    setTransferActive
   };
 })();

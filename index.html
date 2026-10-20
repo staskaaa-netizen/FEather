@@ -70,21 +70,35 @@
       margin: 0 0 5px;
     }
     code, pre { font-family: var(--mono); }
-    .shell { max-width: 1320px; margin: 0 auto; padding: 18px; }
+    .shell { max-width: 1320px; margin: 0 auto; padding: 18px 18px 86px; }
     .topbar {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--line);
       padding-bottom: 14px;
       margin-bottom: 14px;
     }
-    .brand { display: flex; align-items: baseline; gap: 12px; }
+    .brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
     .brand h1 { margin: 0; font-size: 24px; letter-spacing: 0.02em; }
-    .brand span { color: var(--muted); font-family: var(--mono); font-size: 12px; }
-    .top-actions, .status-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .status-strip { justify-content: flex-end; }
+    .brand span { color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+    .connection-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .connection-form { display: flex; gap: 7px; align-items: center; }
+    .endpoint-top {
+      display: inline-block;
+      max-width: 290px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border: 1px solid #293137;
+      border-radius: 4px;
+      background: #0e1113;
+      color: var(--cyan);
+      padding: 8px 9px;
+      font: 11px var(--mono);
+      white-space: nowrap;
+    }
+    .status-strip { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
     .chip {
       display: inline-flex;
       align-items: center;
@@ -97,6 +111,7 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+      white-space: nowrap;
     }
     .chip::before {
       content: "";
@@ -116,18 +131,19 @@
     .chip[data-state="inactive"]::before { background: var(--bad); }
     .server-lamp { border-color: #634e33; background: #1e1914; color: var(--warn); }
 
-    .dashboard {
+    .workspace {
       display: grid;
-      grid-template-columns: minmax(320px, 0.9fr) minmax(480px, 1.6fr);
+      grid-template-columns: minmax(390px, 0.95fr) minmax(440px, 1.35fr);
       gap: 14px;
-      align-items: start;
+      align-items: stretch;
+      min-height: calc(100vh - 215px);
     }
-    .stack { display: grid; gap: 14px; }
     .panel {
       background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent 60px), var(--panel);
       border: 1px solid var(--line);
       border-radius: 6px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      min-width: 0;
     }
     .panel-head {
       display: flex;
@@ -144,16 +160,143 @@
       margin: 0;
     }
     .panel-body { padding: 14px; }
-    .field-grid { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; }
-    .field-grid .wide { grid-column: 1 / -1; }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .hint, .log-meta {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.45;
+    .file-browser { display: flex; flex-direction: column; }
+    .file-browser .panel-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .drop-zone {
+      display: grid;
+      place-items: center;
+      gap: 9px;
+      min-height: 130px;
+      margin-bottom: 12px;
+      border: 1px dashed #58666e;
+      border-radius: 6px;
+      background: rgba(100, 200, 215, 0.035);
+      text-align: center;
+      padding: 18px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease;
     }
-    .hint { margin: 9px 0 0; }
-    .log-meta { font-family: var(--mono); }
+    .drop-zone:hover, .drop-zone:focus-visible, .drop-zone.dragging {
+      border-color: var(--cyan);
+      background: rgba(100, 200, 215, 0.09);
+    }
+    .drop-zone strong { font-size: 15px; }
+    .drop-zone span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .import-status {
+      min-height: 17px;
+      margin: 0 0 7px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .file-list {
+      display: grid;
+      gap: 0;
+      overflow: auto;
+      min-height: 180px;
+      max-height: calc(100vh - 430px);
+      padding-right: 4px;
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      padding: 10px 7px;
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .file-row:first-child { border-top: 0; }
+    .file-row:hover { background: rgba(100,200,215,0.05); }
+    .file-row.selected {
+      background: rgba(242,181,68,0.09);
+      box-shadow: inset 3px 0 var(--accent);
+    }
+    .file-name { overflow-wrap: anywhere; }
+    .file-meta { display: block; color: var(--muted); margin-top: 3px; font-size: 10px; }
+    .file-actions { display: flex; gap: 4px; }
+    .file-actions button { padding: 4px 7px; font-size: 11px; }
+    .empty-state { color: var(--muted); font-style: italic; padding: 14px 0; }
+
+    .preview-panel { display: flex; flex-direction: column; min-height: 0; }
+    .preview-panel .panel-body {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .preview-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .preview-toolbar select { width: 92px; }
+    .preview-name {
+      font-family: var(--mono);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .preview-meta {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      margin-top: 3px;
+    }
+    .file-preview {
+      flex: 1;
+      min-height: 320px;
+      max-height: calc(100vh - 330px);
+      overflow: auto;
+      margin: 0;
+      padding: 12px;
+      border: 1px solid #293137;
+      border-radius: 4px;
+      background: #090c0e;
+      color: #c9d5d9;
+      font: 12px/1.55 var(--mono);
+      white-space: pre;
+      tab-size: 4;
+    }
+    .monitor-bar {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: 12px;
+      transform: translateX(-50%);
+      width: min(1284px, calc(100vw - 36px));
+      display: grid;
+      grid-template-columns: minmax(170px, 1.4fr) repeat(4, auto) minmax(180px, 1fr);
+      gap: 15px;
+      align-items: center;
+      padding: 10px 14px;
+      border: 1px solid #3a454b;
+      border-radius: 7px;
+      background: rgba(20,25,28,0.96);
+      box-shadow: 0 10px 32px rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+    }
+    .monitor-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .monitor-item strong {
+      display: block;
+      font: 12px var(--mono);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .monitor-notice { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
     .notice {
       border-left: 3px solid var(--warn);
       background: rgba(255, 182, 90, 0.07);
@@ -163,84 +306,6 @@
       margin: 12px 0 0;
       font-size: 12px;
     }
-    .endpoint-preview {
-      display: block;
-      color: var(--cyan);
-      background: #0e1113;
-      border: 1px solid #293137;
-      border-radius: 4px;
-      padding: 8px 9px;
-      margin: 10px 0;
-      overflow-wrap: anywhere;
-      font-size: 12px;
-    }
-    .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .metric {
-      border: 1px solid #2b3338;
-      background: #14191c;
-      border-radius: 4px;
-      padding: 9px 10px;
-    }
-    .metric span {
-      display: block;
-      color: var(--muted);
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .metric strong {
-      display: block;
-      font-family: var(--mono);
-      font-size: 15px;
-      font-weight: 500;
-      overflow-wrap: anywhere;
-    }
-    .file-list { display: grid; gap: 0; }
-    .drop-zone {
-      display: grid;
-      place-items: center;
-      gap: 9px;
-      min-height: 150px;
-      margin-bottom: 14px;
-      border: 1px dashed #58666e;
-      border-radius: 6px;
-      background: rgba(100, 200, 215, 0.035);
-      text-align: center;
-      padding: 22px;
-      cursor: pointer;
-      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
-    }
-    .drop-zone:hover, .drop-zone:focus-visible, .drop-zone.dragging {
-      border-color: var(--cyan);
-      background: rgba(100, 200, 215, 0.09);
-    }
-    .drop-zone.dragging { transform: scale(1.005); }
-    .drop-zone strong { font-size: 16px; }
-    .drop-zone span { color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .import-status {
-      min-height: 18px;
-      margin: 0 0 8px;
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 11px;
-    }
-    .file-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
-      align-items: center;
-      border-top: 1px solid var(--line);
-      padding: 9px 0;
-      font-family: var(--mono);
-      font-size: 12px;
-    }
-    .file-row:first-child { border-top: 0; padding-top: 0; }
-    .file-name { overflow-wrap: anywhere; }
-    .file-meta { display: block; color: var(--muted); margin-top: 3px; font-size: 10px; }
-    .file-actions { display: flex; gap: 5px; }
-    .file-actions button { padding: 4px 7px; }
-    .empty-state { color: var(--muted); font-style: italic; padding: 10px 0; }
     .error-banner {
       display: none;
       border-left-color: var(--bad);
@@ -248,7 +313,6 @@
       color: #ffc4c4;
     }
     .error-banner.visible { display: block; }
-
     .diagnostic-panel { margin-top: 14px; }
     .diagnostic-tools {
       display: grid;
@@ -258,6 +322,7 @@
       margin-bottom: 10px;
     }
     .send-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .log-meta { color: var(--muted); font: 11px var(--mono); }
     .log {
       height: 430px;
       overflow: auto;
@@ -269,12 +334,10 @@
       font-size: 12px;
       line-height: 1.6;
       white-space: pre;
-      tab-size: 4;
     }
     .footer {
       color: var(--muted);
-      font-size: 11px;
-      line-height: 1.5;
+      font-size: 10px;
       margin-top: 14px;
       display: flex;
       justify-content: space-between;
@@ -299,6 +362,8 @@
     }
     .dialog-head h2 { margin: 0; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
     .dialog-body { padding: 16px; }
+    .field-grid { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; }
+    .field-grid .wide { grid-column: 1 / -1; }
     .toggle-row {
       display: flex;
       align-items: center;
@@ -307,7 +372,7 @@
       border: 1px solid var(--line);
       border-radius: 4px;
       padding: 10px;
-      margin-top: 12px;
+      margin-top: 10px;
     }
     .toggle-row input { width: auto; }
     .toggle-copy strong { display: block; font-size: 13px; margin-bottom: 3px; }
@@ -319,13 +384,34 @@
       padding: 12px 16px;
       border-top: 1px solid var(--line);
     }
+    .hint { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 9px 0 0; }
+    .endpoint-preview {
+      display: block;
+      color: var(--cyan);
+      background: #0e1113;
+      border: 1px solid #293137;
+      border-radius: 4px;
+      padding: 8px 9px;
+      margin: 10px 0;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+    }
     [hidden] { display: none !important; }
-    @media (max-width: 930px) {
-      .dashboard { grid-template-columns: 1fr; }
+    @media (max-width: 980px) {
       .topbar { align-items: flex-start; flex-direction: column; }
-      .status-strip { justify-content: flex-start; }
+      .connection-bar { justify-content: flex-start; }
+      .workspace { grid-template-columns: 1fr; }
+      .file-list { max-height: 340px; }
+      .file-preview { max-height: 500px; }
+      .monitor-bar {
+        position: static;
+        transform: none;
+        width: auto;
+        margin-top: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .shell { padding-bottom: 18px; }
       .diagnostic-tools { grid-template-columns: 1fr; }
-      .footer { flex-direction: column; }
     }
   </style>
 </head>
@@ -336,59 +422,24 @@
         <h1>TNCweb</h1>
         <span>Heidenhain FE1 file server</span>
       </div>
-      <div class="top-actions">
+      <div class="connection-bar">
+        <code id="endpointSummary" class="endpoint-top">ws://192.168.8.187:8000/</code>
         <div class="status-strip" aria-live="polite">
           <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
           <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC FE1 server offline</span>
         </div>
+        <form id="connectionForm" class="connection-form">
+          <button id="connectButton" class="primary" type="submit">Connect</button>
+          <button id="disconnectButton" type="button" disabled>Disconnect</button>
+        </form>
         <button id="settingsButton" type="button">Settings</button>
       </div>
     </header>
 
     <p class="notice error-banner" id="errorBanner" role="alert"></p>
 
-    <div class="dashboard">
-      <div class="stack">
-        <section class="panel" aria-labelledby="connectionHeading">
-          <div class="panel-head">
-            <h2 id="connectionHeading">W610 connection</h2>
-            <span class="log-meta">7E1</span>
-          </div>
-          <div class="panel-body">
-            <code id="endpointSummary" class="endpoint-preview">ws://192.168.8.187:8000/</code>
-            <form id="connectionForm">
-              <div class="actions">
-                <button id="connectButton" class="primary" type="submit">Connect</button>
-                <button id="disconnectButton" type="button" disabled>Disconnect</button>
-                <button id="stockPageButton" type="button">Open W610 page</button>
-              </div>
-            </form>
-            <p class="hint">The browser and computer must stay awake while the TNC is connected.</p>
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="monitorHeading">
-          <div class="panel-head">
-            <h2 id="monitorHeading">Transfer monitor</h2>
-            <span id="protocolState" class="log-meta">FE1 SERVER OFFLINE</span>
-          </div>
-          <div class="panel-body">
-            <div class="metric-grid">
-              <div class="metric"><span>Current program</span><strong id="currentProgram">-</strong></div>
-              <div class="metric"><span>Last activity</span><strong id="lastActivity">Never</strong></div>
-              <div class="metric"><span>RX bytes</span><strong id="rxCount">0</strong></div>
-              <div class="metric"><span>TX bytes</span><strong id="txCount">0</strong></div>
-              <div class="metric"><span>Stream buffer</span><strong id="queueCount">0 B</strong></div>
-              <div class="metric"><span>Recent RX rate</span><strong id="speedValue">0 B/s</strong></div>
-            </div>
-            <p class="notice" id="transferNotice">
-              FE1 directory, retrieval, receive, and delete services are ready.
-            </p>
-          </div>
-        </section>
-      </div>
-
-      <section class="panel" aria-labelledby="filesHeading">
+    <div class="workspace">
+      <section class="panel file-browser" aria-labelledby="filesHeading">
         <div class="panel-head">
           <h2 id="filesHeading">Browser files</h2>
           <span id="storedSummary" class="log-meta">0 files</span>
@@ -406,7 +457,42 @@
           </div>
         </div>
       </section>
+
+      <section class="panel preview-panel" aria-labelledby="previewHeading">
+        <div class="panel-head">
+          <h2 id="previewHeading">Program preview</h2>
+          <select id="previewMode" aria-label="Preview format">
+            <option value="text">Text</option>
+            <option value="hex">HEX</option>
+          </select>
+        </div>
+        <div class="panel-body">
+          <div class="preview-toolbar">
+            <div>
+              <div id="filePreviewName" class="preview-name">Select a file</div>
+              <div id="filePreviewMeta" class="preview-meta">Choose a program from the list.</div>
+            </div>
+          </div>
+          <pre id="filePreview" class="file-preview">No file selected.</pre>
+        </div>
+      </section>
     </div>
+
+    <section class="monitor-bar" aria-label="Transfer monitor">
+      <div class="monitor-item">
+        <span>Current program</span>
+        <strong id="currentProgram">-</strong>
+      </div>
+      <div class="monitor-item"><span>RX</span><strong id="rxCount">0 B</strong></div>
+      <div class="monitor-item"><span>TX</span><strong id="txCount">0 B</strong></div>
+      <div class="monitor-item"><span>Buffer</span><strong id="queueCount">0 B</strong></div>
+      <div class="monitor-item"><span>Rate</span><strong id="speedValue">0 B/s</strong></div>
+      <div>
+        <div id="protocolState" class="log-meta">FE1 SERVER OFFLINE</div>
+        <div id="lastActivity" class="monitor-notice">No activity</div>
+        <div id="transferNotice" hidden></div>
+      </div>
+    </section>
 
     <section id="diagnosticsPanel" class="panel diagnostic-panel" aria-labelledby="diagnosticHeading" hidden>
       <div class="panel-head">
@@ -430,7 +516,7 @@
             </div>
           </div>
           <button id="clearLogButton" type="button">Clear log</button>
-          <div class="actions" style="margin-top:0">
+          <div class="actions" style="display:flex;gap:8px">
             <button id="exportTextButton" type="button">Export text</button>
             <button id="exportJsonButton" type="button">Export JSON</button>
           </div>
@@ -443,8 +529,8 @@
     </section>
 
     <footer class="footer">
-      <span>FE1 directory, selected-program retrieval, incoming transfer, persistence, and delete.</span>
-      <span>Diagnostics are available from Settings when required.</span>
+      <span>FE1 directory, retrieval, incoming transfer, persistence, and delete.</span>
+      <span>Diagnostics are available from Settings.</span>
     </footer>
   </main>
 
@@ -476,17 +562,27 @@
         <code id="endpointPreview" class="endpoint-preview"></code>
         <div class="toggle-row">
           <div class="toggle-copy">
+            <strong>Auto-connect on page open</strong>
+            <span>Makes one attempt only. It does not poll or retry automatically.</span>
+          </div>
+          <input id="autoConnectToggle" type="checkbox" checked aria-label="Auto-connect on page open">
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-copy">
             <strong>Show diagnostic terminal</strong>
             <span>Shows raw hex/ASCII traffic and manual transmit controls.</span>
           </div>
           <input id="diagnosticsToggle" type="checkbox" aria-label="Show diagnostic terminal">
         </div>
-        <div class="metric" style="margin-top:12px">
-          <span>Page origin</span>
-          <strong id="browserOrigin">-</strong>
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <strong>Page origin</strong>
+            <span id="browserOrigin">-</span>
+          </div>
         </div>
         <p class="hint">
-          Connection settings and diagnostic visibility are stored in this browser. Program files remain in IndexedDB.
+          Connection settings and display options are stored in this browser.
+          Program files remain in IndexedDB.
         </p>
       </div>
       <div class="dialog-actions">

@@ -15,6 +15,7 @@
     fromFe1DirectoryName,
     parseHex,
     toAnnotatedAscii,
+    toAscii,
     toFe1DirectoryName,
     toHex
   } = window.TNCWeb;
@@ -47,7 +48,6 @@
     endpointSummary: byId("endpointSummary"),
     connect: byId("connectButton"),
     disconnect: byId("disconnectButton"),
-    stockPage: byId("stockPageButton"),
     linkChip: byId("linkChip"),
     serverIndicator: byId("serverIndicator"),
     settings: byId("settingsDialog"),
@@ -55,6 +55,7 @@
     settingsButton: byId("settingsButton"),
     settingsClose: byId("settingsCloseButton"),
     settingsCancel: byId("settingsCancelButton"),
+    autoConnectToggle: byId("autoConnectToggle"),
     diagnosticsToggle: byId("diagnosticsToggle"),
     diagnosticsPanel: byId("diagnosticsPanel"),
     protocolState: byId("protocolState"),
@@ -68,6 +69,10 @@
     currentProgram: byId("currentProgram"),
     storedFileList: byId("storedFileList"),
     storedSummary: byId("storedSummary"),
+    filePreviewName: byId("filePreviewName"),
+    filePreviewMeta: byId("filePreviewMeta"),
+    filePreview: byId("filePreview"),
+    previewMode: byId("previewMode"),
     fileDropZone: byId("fileDropZone"),
     browseFiles: byId("browseFilesButton"),
     fileInput: byId("fileInput"),
@@ -87,6 +92,8 @@
   const diagnostics = new DiagnosticLog({ limit: 20000 });
   const storage = new NcStorage();
   const receiveBuffer = new ByteStreamBuffer({ maxBytes: 4 * 1024 * 1024 });
+  let storedRecords = [];
+  let selectedFileName = null;
   const session = {
     transport: null,
     controllerHeld: false,
@@ -197,6 +204,7 @@
       try {
         const reservedNames = directoryFiles.map((file) => file.name);
         const record = await storage.saveReceived(result.filename, result.bytes, reservedNames);
+        selectedFileName = record.name;
         await refreshStoredFiles();
         setTransferActive(false);
         clearError();
@@ -304,6 +312,7 @@
     if (typeof settings.logView === "string") {
       elements.logView.value = settings.logView;
     }
+    elements.autoConnectToggle.checked = settings.autoConnect !== false;
     applyDiagnosticsVisibility(settings.diagnosticsEnabled === true);
   }
 
@@ -313,6 +322,7 @@
       port: elements.port.value,
       path: elements.path.value.trim() || "/",
       timeout: elements.timeout.value,
+      autoConnect: elements.autoConnectToggle.checked,
       diagnosticsEnabled: elements.diagnosticsToggle.checked,
       logView: elements.logView.value
     };
@@ -380,7 +390,43 @@
     elements.error.classList.remove("visible");
   }
 
+  function renderFilePreview(record) {
+    if (!record) {
+      elements.filePreviewName.textContent = "Select a file";
+      elements.filePreviewMeta.textContent = "Choose a program from the list.";
+      elements.filePreview.textContent = "No file selected.";
+      return;
+    }
+    const bytes = new Uint8Array(record.bytes);
+    elements.filePreviewName.textContent = record.name;
+    elements.filePreviewMeta.textContent = `${formatBytes(bytes.byteLength)} · ${new Date(record.updatedAt).toLocaleString()}`;
+    if (elements.previewMode.value === "hex") {
+      const lines = [];
+      for (let offset = 0; offset < bytes.byteLength; offset += 16) {
+        const chunk = bytes.subarray(offset, offset + 16);
+        const hex = toHex(chunk).padEnd(47, " ");
+        lines.push(`${offset.toString(16).padStart(8, "0")}  ${hex}  ${toAscii(chunk)}`);
+      }
+      elements.filePreview.textContent = lines.join("\n") || "(empty file)";
+      return;
+    }
+    try {
+      elements.filePreview.textContent = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch (error) {
+      elements.filePreview.textContent = "This file is not valid text. Switch the preview to HEX.";
+    }
+  }
+
+  function selectStoredFile(name) {
+    selectedFileName = name;
+    for (const row of elements.storedFileList.querySelectorAll(".file-row")) {
+      row.classList.toggle("selected", row.dataset.name === name);
+    }
+    renderFilePreview(storedRecords.find((record) => record.name === name) || null);
+  }
+
   function renderStoredFiles(records) {
+    storedRecords = records;
     elements.storedFileList.replaceChildren();
     const totalBytes = records.reduce((sum, record) => sum + record.size, 0);
     elements.storedSummary.textContent = `${records.length} file${records.length === 1 ? "" : "s"} · ${formatBytes(totalBytes)}`;
@@ -389,11 +435,28 @@
       empty.className = "empty-state";
       empty.textContent = "No files stored in this browser.";
       elements.storedFileList.append(empty);
+      selectedFileName = null;
+      renderFilePreview(null);
       return;
+    }
+    if (!records.some((record) => record.name === selectedFileName)) {
+      selectedFileName = records[0].name;
     }
     for (const record of records) {
       const row = document.createElement("div");
       row.className = "file-row";
+      row.dataset.name = record.name;
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.classList.toggle("selected", record.name === selectedFileName);
+      const choose = () => selectStoredFile(record.name);
+      row.addEventListener("click", choose);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          choose();
+        }
+      });
       const label = document.createElement("span");
       label.className = "file-name";
       label.textContent = record.name;
@@ -407,15 +470,17 @@
       const downloadButton = document.createElement("button");
       downloadButton.type = "button";
       downloadButton.textContent = "Download";
-      downloadButton.addEventListener("click", () => {
+      downloadButton.addEventListener("click", (event) => {
+        event.stopPropagation();
         download(record.name, new Uint8Array(record.bytes), "application/octet-stream");
       });
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
       deleteButton.className = "danger";
       deleteButton.textContent = "Delete";
-      deleteButton.addEventListener("click", async () => {
-        if (!window.confirm(`Delete received file ${record.name}?`)) {
+      deleteButton.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        if (!window.confirm(`Delete browser file ${record.name}?`)) {
           return;
         }
         try {
@@ -429,6 +494,7 @@
       row.append(label, actions);
       elements.storedFileList.append(row);
     }
+    renderFilePreview(records.find((record) => record.name === selectedFileName) || null);
   }
 
   async function refreshStoredFiles() {
@@ -456,6 +522,9 @@
       name: file.name,
       bytes: decodeBase64(file.base64)
     })), "sample-nc-v1");
+    if (imported.length > 0) {
+      selectedFileName = imported[imported.length - 1];
+    }
     await refreshStoredFiles();
   }
 
@@ -780,28 +849,12 @@
     }
   }
 
-  function openStockPage() {
-    try {
-      const host = elements.host.value.trim().replace(/^\[|\]$/g, "");
-      if (!host) {
-        throw new Error("Enter the W610 IP address first.");
-      }
-      const url = new URL("http://localhost/");
-      url.hostname = host;
-      url.pathname = "/websocket.html";
-      window.open(url.toString(), "_blank", "noopener,noreferrer");
-    } catch (error) {
-      showError("Could not open the stock W610 page.", error);
-    }
-  }
-
   elements.form.addEventListener("submit", (event) => {
     event.preventDefault();
     saveSettings();
     connect();
   });
   elements.disconnect.addEventListener("click", disconnect);
-  elements.stockPage.addEventListener("click", openStockPage);
   elements.sendHex.addEventListener("click", sendManualHex);
   elements.hexInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -822,6 +875,9 @@
     download(`tncweb-trace-${stamp}.json`, diagnostics.export("json"), "application/json");
   });
   elements.logView.addEventListener("change", renderLog);
+  elements.previewMode.addEventListener("change", () => {
+    renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
+  });
   elements.settingsButton.addEventListener("click", () => {
     updateEndpoint();
     elements.settings.showModal();
@@ -928,6 +984,14 @@
   diagnostics.add("SYSTEM", null, {
     label: "FE1 directory, retrieval, receive, and delete services are ready"
   });
+
+  if (elements.autoConnectToggle.checked) {
+    setTimeout(() => {
+      if (!session.transport) {
+        connect();
+      }
+    }, 250);
+  }
 
   // Exposed for a future FE1 controller and for the browser test harness.
   window.TNCWebConsole = {

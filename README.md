@@ -24,6 +24,8 @@ Implemented behavior includes:
 - A compact primary workspace with diagnostics hidden by default.
 - A Settings dialog for W610 endpoint, timeout, log view, and diagnostic visibility.
 - Persistent non-file settings in `localStorage`.
+- A top connection bar with an auto-connect option that makes one attempt and does not poll.
+- A left browser-file list, selected-file preview, and compact floating transfer monitor.
 - Browser tests with a simulated transport and scripted mock TNC.
 
 Export-all/restore, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.

@@ -114,15 +114,23 @@
       return record;
     }
 
-    async saveReceived(name, value, reservedNames) {
+    async saveUnique(name, value, reservedNames, source) {
       const records = await this.list();
       const used = new Set(records.map((record) => record.name.toLowerCase()));
       for (const reserved of reservedNames || []) {
         used.add(String(reserved).toLowerCase());
       }
       return this.save(duplicateName(validateFilename(name), used), value, {
-        source: "tnc"
+        source: source || "import"
       });
+    }
+
+    async saveReceived(name, value, reservedNames) {
+      return this.saveUnique(name, value, reservedNames, "tnc");
+    }
+
+    async saveImported(name, value, reservedNames) {
+      return this.saveUnique(name, value, reservedNames, "import");
     }
 
     async initialize(seedFiles, seedKey) {

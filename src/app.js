@@ -68,6 +68,10 @@
     currentProgram: byId("currentProgram"),
     storedFileList: byId("storedFileList"),
     storedSummary: byId("storedSummary"),
+    fileDropZone: byId("fileDropZone"),
+    browseFiles: byId("browseFilesButton"),
+    fileInput: byId("fileInput"),
+    importStatus: byId("importStatus"),
     sendLockNote: byId("sendLockNote"),
     log: byId("logOutput"),
     logCounter: byId("logCounter"),
@@ -270,6 +274,7 @@
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fallbackLockKey = "tncweb.controller.v1";
   const settingsKey = "tncweb.settings.v1";
+  const maxImportBytes = 10 * 1024 * 1024;
 
   function applyDiagnosticsVisibility(visible) {
     const enabled = Boolean(visible);
@@ -394,7 +399,8 @@
       label.textContent = record.name;
       const meta = document.createElement("span");
       meta.className = "file-meta";
-      meta.textContent = `${formatBytes(record.size)} · ${new Date(record.updatedAt).toLocaleString()}${record.source === "tnc" ? " · received" : ""}`;
+      const sourceLabel = record.source === "tnc" ? "received" : record.source === "import" ? "imported" : "bundled";
+      meta.textContent = `${formatBytes(record.size)} · ${new Date(record.updatedAt).toLocaleString()} · ${sourceLabel}`;
       label.append(meta);
       const actions = document.createElement("span");
       actions.className = "file-actions";
@@ -451,6 +457,46 @@
       bytes: decodeBase64(file.base64)
     })), "sample-nc-v1");
     await refreshStoredFiles();
+  }
+
+  async function importFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) {
+      return;
+    }
+    if (session.transferActive) {
+      showError("Wait for the active FE transfer to finish before importing files.");
+      return;
+    }
+
+    const imported = [];
+    const errors = [];
+    elements.importStatus.textContent = `Importing ${files.length} file${files.length === 1 ? "" : "s"}...`;
+    clearError();
+
+    for (const file of files) {
+      try {
+        toFe1DirectoryName(file.name);
+        if (file.size > maxImportBytes) {
+          throw new Error(`File exceeds the ${formatBytes(maxImportBytes)} import limit.`);
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const reserved = (await storage.list()).map((record) => record.name);
+        const saved = await storage.saveImported(file.name, bytes, reserved);
+        imported.push(saved.name);
+        diagnostics.add("SYSTEM", null, {
+          label: `Imported ${file.name} as ${saved.name} (${bytes.byteLength} bytes)`
+        });
+      } catch (error) {
+        errors.push(`${file.name}: ${error.message}`);
+      }
+    }
+
+    await refreshStoredFiles();
+    elements.importStatus.textContent = `${imported.length} imported${errors.length ? `, ${errors.length} rejected` : ""}.`;
+    if (errors.length > 0) {
+      showError(`Some files were rejected: ${errors.join(" | ")}`);
+    }
   }
 
   function setLinkState(state, text) {
@@ -787,6 +833,43 @@
     if (saveSettings()) {
       elements.settings.close();
     }
+  });
+  elements.browseFiles.addEventListener("click", (event) => {
+    event.stopPropagation();
+    elements.fileInput.click();
+  });
+  elements.fileDropZone.addEventListener("click", (event) => {
+    if (event.target !== elements.browseFiles && event.target !== elements.fileInput) {
+      elements.fileInput.click();
+    }
+  });
+  elements.fileDropZone.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      elements.fileInput.click();
+    }
+  });
+  elements.fileInput.addEventListener("change", () => {
+    importFiles(elements.fileInput.files).finally(() => {
+      elements.fileInput.value = "";
+    });
+  });
+  ["dragenter", "dragover"].forEach((type) => {
+    elements.fileDropZone.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      elements.fileDropZone.classList.add("dragging");
+    });
+  });
+  elements.fileDropZone.addEventListener("dragleave", (event) => {
+    if (!elements.fileDropZone.contains(event.relatedTarget)) {
+      elements.fileDropZone.classList.remove("dragging");
+    }
+  });
+  elements.fileDropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    elements.fileDropZone.classList.remove("dragging");
+    importFiles(event.dataTransfer.files);
   });
   [elements.host, elements.port, elements.path].forEach((input) => input.addEventListener("input", updateEndpoint));
 

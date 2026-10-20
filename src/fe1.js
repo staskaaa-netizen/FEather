@@ -93,11 +93,24 @@
   }
 
   function toFe1DirectoryName(filename) {
-    const base = filename.replace(/\.[^.]+$/, "").toUpperCase();
+    const extension = filename.split(".").pop().toUpperCase();
+    const allowed = {
+      H: "H",
+      I: "I",
+      T: "T",
+      D: "D",
+      P: "P",
+      A: "A"
+    };
+    const type = allowed[extension];
+    if (!type) {
+      throw new RangeError(`Unsupported FE1 file extension: ${filename}`);
+    }
+    const base = filename.slice(0, -(extension.length + 1)).toUpperCase();
     if (!/^[A-Z0-9_]{1,15}$/.test(base)) {
       throw new RangeError(`Unsupported FE1 program identifier: ${filename}`);
     }
-    return `H${base}`;
+    return `${type}${base}`;
   }
 
   function fromFe1DirectoryName(identifier) {

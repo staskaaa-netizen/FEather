@@ -197,6 +197,34 @@
       overflow-wrap: anywhere;
     }
     .file-list { display: grid; gap: 0; }
+    .drop-zone {
+      display: grid;
+      place-items: center;
+      gap: 9px;
+      min-height: 150px;
+      margin-bottom: 14px;
+      border: 1px dashed #58666e;
+      border-radius: 6px;
+      background: rgba(100, 200, 215, 0.035);
+      text-align: center;
+      padding: 22px;
+      cursor: pointer;
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    }
+    .drop-zone:hover, .drop-zone:focus-visible, .drop-zone.dragging {
+      border-color: var(--cyan);
+      background: rgba(100, 200, 215, 0.09);
+    }
+    .drop-zone.dragging { transform: scale(1.005); }
+    .drop-zone strong { font-size: 16px; }
+    .drop-zone span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .import-status {
+      min-height: 18px;
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
     .file-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -366,6 +394,13 @@
           <span id="storedSummary" class="log-meta">0 files</span>
         </div>
         <div class="panel-body">
+          <div id="fileDropZone" class="drop-zone" tabindex="0" role="button" aria-label="Browse or drop NC files">
+            <strong>Drop NC files here</strong>
+            <span>.H, .I, .T, .D, .P and .A files are imported byte-for-byte.</span>
+            <button id="browseFilesButton" type="button">Browse files</button>
+            <input id="fileInput" type="file" accept=".H,.I,.T,.D,.P,.A" multiple hidden>
+          </div>
+          <p id="importStatus" class="import-status" aria-live="polite"></p>
           <div id="storedFileList" class="file-list">
             <span class="empty-state">Loading browser files...</span>
           </div>

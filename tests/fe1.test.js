@@ -12,7 +12,8 @@
     calculateBcc,
     encodeDataBlock,
     fromFe1DirectoryName,
-    splitFileLines
+    splitFileLines,
+    toFe1DirectoryName
   } = global.TNCWeb;
 
   const sampleFiles = [
@@ -72,6 +73,15 @@
   test("FE1 header BCC matches the captured HCASEBOTT request", () => {
     const block = new TextEncoder().encode(`\x01HCASEBOTTE\x17`);
     equal(calculateBcc(block), 0x02);
+  });
+
+  test("FE1 importer maps supported file extensions to type prefixes", () => {
+    equal(toFe1DirectoryName("PART.H"), "HPART");
+    equal(toFe1DirectoryName("PART.I"), "IPART");
+    equal(toFe1DirectoryName("TOOL.T"), "TTOOL");
+    equal(toFe1DirectoryName("DATUM.D"), "DDATUM");
+    equal(toFe1DirectoryName("PALLET.P"), "PPALLET");
+    equal(toFe1DirectoryName("NOTES.A"), "ANOTES");
   });
 
   test("FE1 file line blocks preserve content and calculate BCC", () => {

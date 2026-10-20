@@ -18,15 +18,18 @@
     bytesEqual(new Uint8Array(loaded.bytes), bytes);
     const duplicate = await storage.saveReceived("TEST.H", [0x41], ["TEST.H"]);
     equal(duplicate.name, "TEST_1.H");
+    const imported = await storage.saveImported("PROG.I", [0x42], ["TEST.H", "TEST_1.H", "BASE.H"]);
+    equal(imported.name, "PROG.I");
+    equal(imported.source, "import");
 
     storage.close();
     const reopened = new NcStorage({ dbName });
     const records = await reopened.list();
-    equal(records.length, 3);
+    equal(records.length, 4);
     bytesEqual(new Uint8Array(records.find((record) => record.name === "TEST.H").bytes), bytes);
     bytesEqual(new Uint8Array(records.find((record) => record.name === "BASE.H").bytes), [0x38, 0x30]);
     await reopened.remove("BASE.H");
-    equal((await reopened.list()).length, 2);
+    equal((await reopened.list()).length, 3);
     await reopened.clear();
     reopened.close();
     indexedDB.deleteDatabase(dbName);

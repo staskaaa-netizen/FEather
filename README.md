@@ -19,13 +19,14 @@ Implemented behavior includes:
 - Selected-program retrieval with XOR block-check characters, ACK/NAK handling, bounded retries, and ETX/EOT completion.
 - TNC-to-browser block reception with BCC validation, ACK/NAK, and atomic IndexedDB commit after ETX.
 - A persistent received-file list with Download and Delete controls.
+- Multi-file Browse and drag-and-drop import with byte-exact IndexedDB storage.
 - TNC-requested deletion with an updated external directory handshake.
 - A compact primary workspace with diagnostics hidden by default.
 - A Settings dialog for W610 endpoint, timeout, log view, and diagnostic visibility.
 - Persistent non-file settings in `localStorage`.
 - Browser tests with a simulated transport and scripted mock TNC.
 
-Complete import/export, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
+Export-all/restore, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
 
 Diagnostics and manual byte transmission are hidden from the main screen. Enable **Show diagnostic terminal** in Settings when raw traffic is required. File contents remain in IndexedDB; connection and display preferences use `localStorage`.
 
@@ -64,7 +65,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `32 passed, 0 failed`.
+The expected result is `33 passed, 0 failed`.
 
 ## Documentation
 

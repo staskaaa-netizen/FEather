@@ -1,10 +1,10 @@
 # Browser and hardware testing
 
-Document status: 20 October 2026, Milestone 1.
+Document status: 20 October 2026. Transport and FE1 directory tested on the target TNC.
 
 ## Automated browser tests
 
-Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 17 tests:
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 23 tests:
 
 - Hex parsing, control-character naming, and diagnostic export.
 - Configurable endpoint validation.
@@ -19,6 +19,10 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - Disconnected write rejection.
 - Scripted mock W610 fragmented responses.
 - Mock serial connection loss.
+- FE1 directory request fragmentation and exact response framing.
+- Coalesced and unrelated FE1 directory request handling.
+- Minimal single-entry directory response used for live TNC isolation.
+- FE401-type `H100` identifier mapping and the equivalent zero/letter-O request variant.
 
 The WebSocket tests use an injected `FakeWebSocket`. The mock TNC responses use synthetic byte sequences. They validate the browser transport and buffering code; they are **not** documented FE1 examples and do not prove TNC compatibility.
 
@@ -76,7 +80,16 @@ Stage 3 is complete for this W610 at `38400 7E1`.
 
 ### Stage 4 — FE1 directory request
 
-Do not run this stage until Milestone 3 has cited FE1 packet semantics. Capture the TNC-entered command, browser TX/RX hex, timestamps, ACK/NAK sequence, and visible TNC result.
+Recorded result on 20 October 2026:
+
+- TNC request: `13 1B 11 4F 20 44 0D 0A`.
+- One-record test: FE401 header plus `H100` record and `<ETX>`.
+- TNC displayed `100.H`.
+- TNC replied `<EOT>`.
+- Full eight-file response was accepted and all eight names were visible.
+- After selection, the TNC requested `H100` with a BCC-protected header.
+
+The selected-file operation remains unimplemented; directory listing is complete for this machine.
 
 ### Stage 5 — Receive a small program
 

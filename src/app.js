@@ -4,12 +4,24 @@
   const {
     ByteStreamBuffer,
     DiagnosticLog,
+    Fe1DirectoryResponder,
     WebSocketSerialTransport,
     buildWebSocketEndpoint,
     parseHex,
     toAnnotatedAscii,
     toHex
   } = window.TNCWeb;
+
+  const directoryFiles = [
+    { name: "CASEBOTT.H", size: 764 },
+    { name: "CASEBTAP.H", size: 542 },
+    { name: "CASEFSLO.H", size: 892 },
+    { name: "CASEMAIN.H", size: 560 },
+    { name: "CASETAP.H", size: 319 },
+    { name: "CASETOP.H", size: 462 },
+    { name: "CASETOPF.H", size: 340 },
+    { name: "CBERNG37.H", size: 417 }
+  ];
 
   const byId = (id) => document.getElementById(id);
   const elements = {
@@ -56,6 +68,34 @@
     lastSampleRx: 0,
     lastSampleAt: performance.now()
   };
+
+  const directoryResponder = new Fe1DirectoryResponder({
+    getFiles: () => directoryFiles,
+    options: {
+      totalSectors: 3088
+    },
+    onResponse: (bytes, detail) => {
+      const transport = session.transport;
+      if (!transport || transport.state !== "open") {
+        return;
+      }
+      try {
+        transport.write(bytes);
+        elements.serverIndicator.dataset.state = "active";
+        elements.serverIndicator.textContent = `Directory served - ${detail.files.length} files`;
+        elements.protocolState.textContent = "FE1 DIRECTORY SERVED - FILE TRANSFER PENDING";
+        diagnostics.add("SYSTEM", null, {
+          label: `FE1 directory response: ${detail.files.length} files, ${bytes.byteLength} bytes`
+        });
+      } catch (error) {
+        showError("Could not send the FE1 directory response.", error);
+        diagnostics.add("SYSTEM", null, {
+          label: "FE1 directory response failed",
+          error: error.message
+        });
+      }
+    }
+  });
 
   let releaseWebLock = null;
   let fallbackLeaseTimer = null;
@@ -236,6 +276,7 @@
     transport.addEventListener("data", (event) => {
       const bytes = event.detail.bytes;
       diagnostics.add("RX", bytes, { label: "W610→browser" });
+      directoryResponder.feed(bytes);
       try {
         receiveBuffer.append(bytes);
       } catch (error) {
@@ -260,7 +301,9 @@
         elements.protocolState.textContent = "TRANSPORT CONNECTING";
       } else if (detail.state === "open") {
         setLinkState("open", "W610 link active");
-        elements.protocolState.textContent = "RAW TRANSPORT · FE1 PENDING";
+        elements.serverIndicator.dataset.state = "active";
+        elements.serverIndicator.textContent = "TNC directory responder ready";
+        elements.protocolState.textContent = "FE1 DIRECTORY READY - FILE TRANSFER PENDING";
         diagnostics.add("SYSTEM", null, { label: `Connected ${transport.url}` });
         clearError();
       } else if (detail.state === "closing") {
@@ -269,6 +312,8 @@
         const endedUnexpectedly = detail.unexpected && !session.manualDisconnect;
         setLinkState(endedUnexpectedly ? "error" : "inactive", endedUnexpectedly ? "W610 link lost" : "W610 link offline");
         elements.protocolState.textContent = "TRANSPORT CLOSED";
+        elements.serverIndicator.dataset.state = "inactive";
+        elements.serverIndicator.textContent = "TNC directory responder offline";
         diagnostics.add("SYSTEM", null, {
           label: endedUnexpectedly ? "Connection lost" : "Disconnected",
           error: detail.reason || (detail.lastError && detail.lastError.message) || ""
@@ -302,6 +347,7 @@
     elements.disconnect.disabled = false;
     session.manualDisconnect = false;
     receiveBuffer.clear();
+    directoryResponder.reset();
     updateCounters();
 
     try {

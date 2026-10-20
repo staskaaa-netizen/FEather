@@ -1,10 +1,10 @@
 # TNCweb
 
-TNCweb is a browser-only transport and file-server project for a Heidenhain TNC 415 connected through a stock USR-W610 Wi-Fi-to-RS232 bridge. This repository currently implements **Milestone 1 only**.
+TNCweb is a browser-only transport and file-server project for a Heidenhain TNC 415 connected through a stock USR-W610 Wi-Fi-to-RS232 bridge. The transport milestone and the FE1 directory portion of the protocol milestone are implemented and hardware-verified.
 
 ## Current milestone
 
-Milestone 1 provides:
+Implemented behavior includes:
 
 - A byte-oriented `SerialTransport` abstraction.
 - A browser WebSocket transport verified against the connected W610 stock page at `ws://192.168.8.187:8000`.
@@ -14,13 +14,17 @@ Milestone 1 provides:
 - Explicit disconnect and connection-loss handling with no automatic reconnect.
 - Timestamped hex/ASCII diagnostics, manual hex sending, trace export, and clear.
 - A browser lock that prevents two TNCweb tabs from controlling the serial link at the same time.
+- An FE1 plain-text directory responder using the FE401 record format from the TNC technical manual.
+- Live TNC 415 verification of the request, filename mapping, ETX terminator, and EOT acknowledgement.
 - Browser tests with a simulated transport and scripted mock TNC.
 
-FE1 directory, upload, download, IndexedDB storage, and a TNC server-active state are deliberately not claimed. The console displays `TNC server inactive — FE1 pending`.
+Program retrieval, upload, IndexedDB storage, and interrupted-transfer recovery are not yet claimed. The TNC currently requests a selected program with a BCC-protected header after the directory is displayed.
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 
 A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
+
+The live TNC directory test uses FE401 identifiers such as `H100`, which the TNC displays as `100.H`. The eight sample files are mapped as `H` plus the filename without `.H`.
 
 ## Run locally
 
@@ -45,7 +49,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `17 passed, 0 failed`.
+The expected result is `23 passed, 0 failed`.
 
 ## Documentation
 
@@ -57,4 +61,4 @@ The expected result is `17 passed, 0 failed`.
 
 ## Safety boundary
 
-This build can send arbitrary hexadecimal bytes only after an explicit operator action. It does not emit FE1 commands, acknowledge incoming file data, or persist NC files. Do not use it as a production file server until Milestones 2–5 are complete and hardware traces are recorded.
+This build emits only the FE1 directory response automatically. It does not yet serve file contents, acknowledge incoming program blocks, or persist NC files. Do not use it as a production file server until retrieval, upload, storage, and interruption recovery are implemented and verified.

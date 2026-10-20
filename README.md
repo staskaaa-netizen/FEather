@@ -94,3 +94,7 @@ The expected result is `33 passed, 0 failed`.
 ## Safety boundary
 
 This build automatically answers FE1 directory, retrieval, receive, storage, and delete requests. Rename/replace, complete import/export, quota-edge handling, and interrupted-transfer recovery remain incomplete.
+
+## Hashtags
+
+`#FEather` `#TNCremo` `#Heidenhain` `#TNC415` `#TNC415B` `#FE401` `#CNC` `#FileServer` `#WebSocket` `#IndexedDB` `#JavaScript`

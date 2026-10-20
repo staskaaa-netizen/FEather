@@ -65,6 +65,15 @@ Confirm there is no replacement, escaping, UTF-8 expansion, line-ending conversi
 
 Failure to preserve bytes immediately blocks FE1 implementation until the stock WebSocket framing is understood.
 
+Recorded result on 20 October 2026 with DB9 pins 2–3 connected:
+
+- `00 01 02 03 04 06 11 13 15 17 1B 7F 41 42 43 0D 0A` returned exactly.
+- Every byte from `00` through `7F` returned exactly.
+- The full 128-byte range arrived in one WebSocket message.
+- Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
+
+Stage 3 is complete for this W610 at `38400 7E1`.
+
 ### Stage 4 — FE1 directory request
 
 Do not run this stage until Milestone 3 has cited FE1 packet semantics. Capture the TNC-entered command, browser TX/RX hex, timestamps, ACK/NAK sequence, and visible TNC result.

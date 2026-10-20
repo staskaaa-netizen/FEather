@@ -20,6 +20,8 @@ FE1 directory, upload, download, IndexedDB storage, and a TNC server-active stat
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 
+A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
+
 ## Run locally
 
 Open [index.html](index.html) directly in Firefox or a Chromium-based browser. The current milestone uses classic scripts and has no build step. The browser must remain open and the computer must remain awake.

@@ -44,11 +44,19 @@
     path: byId("pathInput"),
     timeout: byId("timeoutInput"),
     endpoint: byId("endpointPreview"),
+    endpointSummary: byId("endpointSummary"),
     connect: byId("connectButton"),
     disconnect: byId("disconnectButton"),
     stockPage: byId("stockPageButton"),
     linkChip: byId("linkChip"),
     serverIndicator: byId("serverIndicator"),
+    settings: byId("settingsDialog"),
+    settingsForm: byId("settingsForm"),
+    settingsButton: byId("settingsButton"),
+    settingsClose: byId("settingsCloseButton"),
+    settingsCancel: byId("settingsCancelButton"),
+    diagnosticsToggle: byId("diagnosticsToggle"),
+    diagnosticsPanel: byId("diagnosticsPanel"),
     protocolState: byId("protocolState"),
     rxCount: byId("rxCount"),
     txCount: byId("txCount"),
@@ -59,6 +67,7 @@
     transferNotice: byId("transferNotice"),
     currentProgram: byId("currentProgram"),
     storedFileList: byId("storedFileList"),
+    storedSummary: byId("storedSummary"),
     sendLockNote: byId("sendLockNote"),
     log: byId("logOutput"),
     logCounter: byId("logCounter"),
@@ -260,6 +269,58 @@
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fallbackLockKey = "tncweb.controller.v1";
+  const settingsKey = "tncweb.settings.v1";
+
+  function applyDiagnosticsVisibility(visible) {
+    const enabled = Boolean(visible);
+    elements.diagnosticsToggle.checked = enabled;
+    elements.diagnosticsPanel.hidden = !enabled;
+  }
+
+  function loadSettings() {
+    let settings = {};
+    try {
+      settings = JSON.parse(localStorage.getItem(settingsKey) || "{}");
+    } catch (error) {
+      settings = {};
+    }
+    if (typeof settings.host === "string") {
+      elements.host.value = settings.host;
+    }
+    if (settings.port !== undefined) {
+      elements.port.value = settings.port;
+    }
+    if (typeof settings.path === "string") {
+      elements.path.value = settings.path;
+    }
+    if (settings.timeout !== undefined) {
+      elements.timeout.value = settings.timeout;
+    }
+    if (typeof settings.logView === "string") {
+      elements.logView.value = settings.logView;
+    }
+    applyDiagnosticsVisibility(settings.diagnosticsEnabled === true);
+  }
+
+  function saveSettings() {
+    const settings = {
+      host: elements.host.value.trim(),
+      port: elements.port.value,
+      path: elements.path.value.trim() || "/",
+      timeout: elements.timeout.value,
+      diagnosticsEnabled: elements.diagnosticsToggle.checked,
+      logView: elements.logView.value
+    };
+    try {
+      localStorage.setItem(settingsKey, JSON.stringify(settings));
+      applyDiagnosticsVisibility(settings.diagnosticsEnabled);
+      clearError();
+      return true;
+    } catch (error) {
+      showError("Could not save settings in this browser.", error);
+      return false;
+    }
+  }
 
   function formatBytes(value) {
     const bytes = Number(value) || 0;
@@ -290,11 +351,16 @@
 
   function updateEndpoint() {
     try {
-      elements.endpoint.textContent = endpointValue();
+      const url = endpointValue();
+      elements.endpoint.textContent = url;
+      elements.endpointSummary.textContent = url;
       elements.endpoint.style.color = "";
+      elements.endpointSummary.style.color = "";
     } catch (error) {
       elements.endpoint.textContent = error.message;
+      elements.endpointSummary.textContent = error.message;
       elements.endpoint.style.color = "var(--bad)";
+      elements.endpointSummary.style.color = "var(--bad)";
     }
   }
 
@@ -311,15 +377,25 @@
 
   function renderStoredFiles(records) {
     elements.storedFileList.replaceChildren();
+    const totalBytes = records.reduce((sum, record) => sum + record.size, 0);
+    elements.storedSummary.textContent = `${records.length} file${records.length === 1 ? "" : "s"} · ${formatBytes(totalBytes)}`;
     if (records.length === 0) {
-      elements.storedFileList.textContent = "No received files.";
+      const empty = document.createElement("span");
+      empty.className = "empty-state";
+      empty.textContent = "No files stored in this browser.";
+      elements.storedFileList.append(empty);
       return;
     }
     for (const record of records) {
       const row = document.createElement("div");
       row.className = "file-row";
       const label = document.createElement("span");
-      label.textContent = `${record.name} · ${formatBytes(record.size)} · ${new Date(record.updatedAt).toLocaleString()}`;
+      label.className = "file-name";
+      label.textContent = record.name;
+      const meta = document.createElement("span");
+      meta.className = "file-meta";
+      meta.textContent = `${formatBytes(record.size)} · ${new Date(record.updatedAt).toLocaleString()}${record.source === "tnc" ? " · received" : ""}`;
+      label.append(meta);
       const actions = document.createElement("span");
       actions.className = "file-actions";
       const downloadButton = document.createElement("button");
@@ -675,6 +751,7 @@
 
   elements.form.addEventListener("submit", (event) => {
     event.preventDefault();
+    saveSettings();
     connect();
   });
   elements.disconnect.addEventListener("click", disconnect);
@@ -699,6 +776,18 @@
     download(`tncweb-trace-${stamp}.json`, diagnostics.export("json"), "application/json");
   });
   elements.logView.addEventListener("change", renderLog);
+  elements.settingsButton.addEventListener("click", () => {
+    updateEndpoint();
+    elements.settings.showModal();
+  });
+  elements.settingsClose.addEventListener("click", () => elements.settings.close());
+  elements.settingsCancel.addEventListener("click", () => elements.settings.close());
+  elements.settingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (saveSettings()) {
+      elements.settings.close();
+    }
+  });
   [elements.host, elements.port, elements.path].forEach((input) => input.addEventListener("input", updateEndpoint));
 
   diagnostics.addEventListener("entry", renderLog);
@@ -719,6 +808,7 @@
   }, 1000);
 
   window.addEventListener("beforeunload", () => {
+    saveSettings();
     if (session.transport && session.transport.socket) {
       try {
         session.transport.socket.close(1001, "Page closed");
@@ -743,6 +833,7 @@
   elements.origin.textContent = window.location.origin === "null"
     ? "file:// (opaque or browser-defined origin)"
     : window.location.origin;
+  loadSettings();
   updateEndpoint();
   updateCounters();
   initializeStoredFiles().catch((error) => {

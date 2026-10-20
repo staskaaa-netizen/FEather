@@ -20,9 +20,14 @@ Implemented behavior includes:
 - TNC-to-browser block reception with BCC validation, ACK/NAK, and atomic IndexedDB commit after ETX.
 - A persistent received-file list with Download and Delete controls.
 - TNC-requested deletion with an updated external directory handshake.
+- A compact primary workspace with diagnostics hidden by default.
+- A Settings dialog for W610 endpoint, timeout, log view, and diagnostic visibility.
+- Persistent non-file settings in `localStorage`.
 - Browser tests with a simulated transport and scripted mock TNC.
 
 Complete import/export, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
+
+Diagnostics and manual byte transmission are hidden from the main screen. Enable **Show diagnostic terminal** in Settings when raw traffic is required. File contents remain in IndexedDB; connection and display preferences use `localStorage`.
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 

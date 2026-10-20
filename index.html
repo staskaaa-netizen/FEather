@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>TNCweb — W610 transport console</title>
+  <title>TNCweb - Heidenhain FE1 file server</title>
   <style>
     :root {
       --bg: #111417;
@@ -19,22 +19,18 @@
       --good: #65d28b;
       --bad: #ff7474;
       --warn: #ffb65a;
-      --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      --mono: "Cascadia Mono", "Consolas", monospace;
       --sans: "Segoe UI", Tahoma, sans-serif;
     }
-
     * { box-sizing: border-box; }
     html, body { min-height: 100%; }
     body {
       margin: 0;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,0.025) 25%, transparent 25%) 0 0 / 18px 18px,
-        var(--bg);
+      background: linear-gradient(135deg, rgba(255,255,255,0.025) 25%, transparent 25%) 0 0 / 18px 18px, var(--bg);
       color: var(--text);
       font-family: var(--sans);
       font-size: 14px;
     }
-
     button, input, select { font: inherit; }
     button {
       border: 1px solid var(--line);
@@ -74,8 +70,7 @@
       margin: 0 0 5px;
     }
     code, pre { font-family: var(--mono); }
-
-    .shell { max-width: 1500px; margin: 0 auto; padding: 18px; }
+    .shell { max-width: 1320px; margin: 0 auto; padding: 18px; }
     .topbar {
       display: flex;
       gap: 16px;
@@ -88,7 +83,8 @@
     .brand { display: flex; align-items: baseline; gap: 12px; }
     .brand h1 { margin: 0; font-size: 24px; letter-spacing: 0.02em; }
     .brand span { color: var(--muted); font-family: var(--mono); font-size: 12px; }
-    .status-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .top-actions, .status-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .status-strip { justify-content: flex-end; }
     .chip {
       display: inline-flex;
       align-items: center;
@@ -118,15 +114,11 @@
     .chip[data-state="closing"]::before { background: var(--warn); }
     .chip[data-state="error"]::before,
     .chip[data-state="inactive"]::before { background: var(--bad); }
-    .server-lamp {
-      border-color: #634e33;
-      background: #1e1914;
-      color: var(--warn);
-    }
+    .server-lamp { border-color: #634e33; background: #1e1914; color: var(--warn); }
 
-    .grid {
+    .dashboard {
       display: grid;
-      grid-template-columns: minmax(320px, 0.82fr) minmax(500px, 1.8fr);
+      grid-template-columns: minmax(320px, 0.9fr) minmax(480px, 1.6fr);
       gap: 14px;
       align-items: start;
     }
@@ -152,19 +144,16 @@
       margin: 0;
     }
     .panel-body { padding: 14px; }
-    .field-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 110px;
-      gap: 10px;
-    }
+    .field-grid { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; }
     .field-grid .wide { grid-column: 1 / -1; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    .hint {
+    .hint, .log-meta {
       color: var(--muted);
       font-size: 12px;
       line-height: 1.45;
-      margin: 9px 0 0;
     }
+    .hint { margin: 9px 0 0; }
+    .log-meta { font-family: var(--mono); }
     .notice {
       border-left: 3px solid var(--warn);
       background: rgba(255, 182, 90, 0.07);
@@ -180,16 +169,12 @@
       background: #0e1113;
       border: 1px solid #293137;
       border-radius: 4px;
-      padding: 7px 8px;
-      margin-top: 8px;
+      padding: 8px 9px;
+      margin: 10px 0;
       overflow-wrap: anywhere;
       font-size: 12px;
     }
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .metric {
       border: 1px solid #2b3338;
       background: #14191c;
@@ -211,24 +196,23 @@
       font-weight: 500;
       overflow-wrap: anywhere;
     }
-    .file-list {
-      display: grid;
-      gap: 6px;
-      margin-top: 10px;
-    }
+    .file-list { display: grid; gap: 0; }
     .file-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
       border-top: 1px solid var(--line);
-      padding-top: 7px;
+      padding: 9px 0;
       font-family: var(--mono);
       font-size: 12px;
     }
     .file-row:first-child { border-top: 0; padding-top: 0; }
+    .file-name { overflow-wrap: anywhere; }
+    .file-meta { display: block; color: var(--muted); margin-top: 3px; font-size: 10px; }
     .file-actions { display: flex; gap: 5px; }
     .file-actions button { padding: 4px 7px; }
+    .empty-state { color: var(--muted); font-style: italic; padding: 10px 0; }
     .error-banner {
       display: none;
       border-left-color: var(--bad);
@@ -237,6 +221,7 @@
     }
     .error-banner.visible { display: block; }
 
+    .diagnostic-panel { margin-top: 14px; }
     .diagnostic-tools {
       display: grid;
       grid-template-columns: minmax(260px, 1fr) auto auto;
@@ -245,14 +230,6 @@
       margin-bottom: 10px;
     }
     .send-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-    .log-meta {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 11px;
-      font-family: var(--mono);
-    }
     .log {
       height: 430px;
       overflow: auto;
@@ -266,7 +243,6 @@
       white-space: pre;
       tab-size: 4;
     }
-    .log .muted { color: var(--muted); }
     .footer {
       color: var(--muted);
       font-size: 11px;
@@ -276,21 +252,48 @@
       justify-content: space-between;
       gap: 16px;
     }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
+    .settings-dialog {
+      width: min(620px, calc(100vw - 28px));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      background: var(--panel);
+      box-shadow: 0 28px 80px rgba(0,0,0,0.6);
       padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0,0,0,0);
-      white-space: nowrap;
-      border: 0;
+    }
+    .settings-dialog::backdrop { background: rgba(0,0,0,0.72); }
+    .dialog-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dialog-head h2 { margin: 0; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .dialog-body { padding: 16px; }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 12px;
+    }
+    .toggle-row input { width: auto; }
+    .toggle-copy strong { display: block; font-size: 13px; margin-bottom: 3px; }
+    .toggle-copy span { color: var(--muted); font-size: 11px; }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
     }
     [hidden] { display: none !important; }
-
     @media (max-width: 930px) {
-      .grid { grid-template-columns: 1fr; }
+      .dashboard { grid-template-columns: 1fr; }
       .topbar { align-items: flex-start; flex-direction: column; }
       .status-strip { justify-content: flex-start; }
       .diagnostic-tools { grid-template-columns: 1fr; }
@@ -303,57 +306,36 @@
     <header class="topbar">
       <div class="brand">
         <h1>TNCweb</h1>
-        <span>W610 transport console · Milestone 1</span>
+        <span>Heidenhain FE1 file server</span>
       </div>
-      <div class="status-strip" aria-live="polite">
-        <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
-        <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC FE1 server offline</span>
+      <div class="top-actions">
+        <div class="status-strip" aria-live="polite">
+          <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
+          <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC FE1 server offline</span>
+        </div>
+        <button id="settingsButton" type="button">Settings</button>
       </div>
     </header>
 
-    <div class="grid">
+    <p class="notice error-banner" id="errorBanner" role="alert"></p>
+
+    <div class="dashboard">
       <div class="stack">
         <section class="panel" aria-labelledby="connectionHeading">
           <div class="panel-head">
             <h2 id="connectionHeading">W610 connection</h2>
-            <span class="log-meta">7E1 · baud set on W610</span>
+            <span class="log-meta">7E1</span>
           </div>
           <div class="panel-body">
+            <code id="endpointSummary" class="endpoint-preview">ws://192.168.8.187:8000/</code>
             <form id="connectionForm">
-              <div class="field-grid">
-                <div class="wide">
-                  <label for="hostInput">W610 IP or hostname</label>
-                  <input id="hostInput" name="host" value="192.168.8.187" autocomplete="off" spellcheck="false">
-                </div>
-                <div>
-                  <label for="portInput">WebSocket port</label>
-                  <input id="portInput" name="port" type="number" min="1" max="65535" value="8000" inputmode="numeric">
-                </div>
-                <div>
-                  <label for="timeoutInput">Timeout ms</label>
-                  <input id="timeoutInput" name="timeout" type="number" min="1000" max="30000" step="500" value="5000" inputmode="numeric">
-                </div>
-                <div class="wide">
-                  <label for="pathInput">WebSocket path</label>
-                  <input id="pathInput" name="path" value="/" autocomplete="off" spellcheck="false">
-                </div>
-              </div>
-              <code id="endpointPreview" class="endpoint-preview" aria-live="polite"></code>
-              <p class="notice">
-                Stock W610 page verified: it opens <code>ws://&lt;host&gt;:8000</code> with no path and requests
-                ArrayBuffer messages. Use binary hex for byte-exact output. Actual serial control-byte integrity and timing
-                still require the loopback test.
-              </p>
-              <p class="hint">
-                Chromium may ask for local-network access. Allow it for this page. If <code>file://</code> is restricted,
-                use <code>serve.ps1</code> and open the app from localhost.
-              </p>
               <div class="actions">
                 <button id="connectButton" class="primary" type="submit">Connect</button>
                 <button id="disconnectButton" type="button" disabled>Disconnect</button>
-                <button id="stockPageButton" type="button">Open stock page</button>
+                <button id="stockPageButton" type="button">Open W610 page</button>
               </div>
             </form>
+            <p class="hint">The browser and computer must stay awake while the TNC is connected.</p>
           </div>
         </section>
 
@@ -364,99 +346,120 @@
           </div>
           <div class="panel-body">
             <div class="metric-grid">
-              <div class="metric">
-                <span>RX bytes</span>
-                <strong id="rxCount">0</strong>
-              </div>
-              <div class="metric">
-                <span>TX bytes</span>
-                <strong id="txCount">0</strong>
-              </div>
-              <div class="metric">
-                <span>Stream buffer</span>
-                <strong id="queueCount">0 B</strong>
-              </div>
-              <div class="metric">
-                <span>Recent RX rate</span>
-                <strong id="speedValue">0 B/s</strong>
-              </div>
-              <div class="metric">
-                <span>Current program</span>
-                <strong id="currentProgram">—</strong>
-              </div>
-              <div class="metric">
-                <span>Last activity</span>
-                <strong id="lastActivity">Never</strong>
-              </div>
+              <div class="metric"><span>Current program</span><strong id="currentProgram">-</strong></div>
+              <div class="metric"><span>Last activity</span><strong id="lastActivity">Never</strong></div>
+              <div class="metric"><span>RX bytes</span><strong id="rxCount">0</strong></div>
+              <div class="metric"><span>TX bytes</span><strong id="txCount">0</strong></div>
+              <div class="metric"><span>Stream buffer</span><strong id="queueCount">0 B</strong></div>
+              <div class="metric"><span>Recent RX rate</span><strong id="speedValue">0 B/s</strong></div>
             </div>
             <p class="notice" id="transferNotice">
-              FE1 directory, retrieval, receive, and delete services are active. Manual TX is locked during a file transfer.
-            </p>
-            <div>
-              <label style="margin-top:14px">Files stored from TNC</label>
-              <div id="storedFileList" class="file-list">No received files.</div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="originHeading">
-          <div class="panel-head">
-            <h2 id="originHeading">Runtime</h2>
-          </div>
-          <div class="panel-body">
-            <div class="metric">
-              <span>Page origin</span>
-              <strong id="browserOrigin">—</strong>
-            </div>
-            <p class="hint">
-              The browser must remain open and awake. Closing, suspending, or sleeping the page ends this transport session.
-              No reconnect occurs automatically.
+              FE1 directory, retrieval, receive, and delete services are ready.
             </p>
           </div>
         </section>
       </div>
 
-      <section class="panel" aria-labelledby="diagnosticHeading">
+      <section class="panel" aria-labelledby="filesHeading">
         <div class="panel-head">
-          <h2 id="diagnosticHeading">Diagnostic terminal</h2>
-          <div class="log-meta">
-            <span id="logCounter">0 entries</span>
-            <select id="logView" aria-label="Log view">
-              <option value="combined">Combined</option>
-              <option value="hex">HEX</option>
-              <option value="ascii">ASCII</option>
-            </select>
-          </div>
+          <h2 id="filesHeading">Browser files</h2>
+          <span id="storedSummary" class="log-meta">0 files</span>
         </div>
         <div class="panel-body">
-          <div class="diagnostic-tools">
-            <div>
-              <label for="hexInput">Manual hex bytes</label>
-              <div class="send-row">
-                <input id="hexInput" placeholder="01 00 0D 11 13 06" autocomplete="off" spellcheck="false">
-                <button id="sendHexButton" type="button" disabled>Send</button>
-              </div>
-            </div>
-            <button id="clearLogButton" type="button">Clear log</button>
-            <div class="actions" style="margin-top:0">
-              <button id="exportTextButton" type="button">Export text</button>
-              <button id="exportJsonButton" type="button">Export JSON</button>
-            </div>
+          <div id="storedFileList" class="file-list">
+            <span class="empty-state">Loading browser files...</span>
           </div>
-          <p class="notice error-banner" id="errorBanner" role="alert"></p>
-          <p class="hint" id="sendLockNote">
-            Binary WebSocket frames are used for transmitted bytes. Received text frames are converted as UTF-8 for diagnostics.
-          </p>
         </div>
-        <pre id="logOutput" class="log" aria-live="polite">No traffic.</pre>
       </section>
     </div>
 
+    <section id="diagnosticsPanel" class="panel diagnostic-panel" aria-labelledby="diagnosticHeading" hidden>
+      <div class="panel-head">
+        <h2 id="diagnosticHeading">Diagnostic terminal</h2>
+        <div class="log-meta">
+          <span id="logCounter">0 entries</span>
+          <select id="logView" aria-label="Log view">
+            <option value="combined">Combined</option>
+            <option value="hex">HEX</option>
+            <option value="ascii">ASCII</option>
+          </select>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="diagnostic-tools">
+          <div>
+            <label for="hexInput">Manual hex bytes</label>
+            <div class="send-row">
+              <input id="hexInput" placeholder="01 00 0D 11 13 06" autocomplete="off" spellcheck="false">
+              <button id="sendHexButton" type="button" disabled>Send</button>
+            </div>
+          </div>
+          <button id="clearLogButton" type="button">Clear log</button>
+          <div class="actions" style="margin-top:0">
+            <button id="exportTextButton" type="button">Export text</button>
+            <button id="exportJsonButton" type="button">Export JSON</button>
+          </div>
+        </div>
+        <p class="hint" id="sendLockNote">
+          Binary WebSocket frames carry serial output. Incoming text frames are decoded as UTF-8.
+        </p>
+      </div>
+      <pre id="logOutput" class="log" aria-live="polite">No traffic.</pre>
+    </section>
+
     <footer class="footer">
-      <span>Transport-only build. FE1 directory, upload, and download are deliberately not claimed.</span>
-      <span>Control bytes are logged symbolically when needed: NUL, SOH, STX, ETX, ETB, EOT, ACK, NAK, DC1, DC3.</span>
+      <span>FE1 directory, selected-program retrieval, incoming transfer, persistence, and delete.</span>
+      <span>Diagnostics are available from Settings when required.</span>
     </footer>
   </main>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form id="settingsForm">
+      <div class="dialog-head">
+        <h2>Settings</h2>
+        <button id="settingsCloseButton" type="button">Close</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field-grid">
+          <div class="wide">
+            <label for="hostInput">W610 IP or hostname</label>
+            <input id="hostInput" name="host" value="192.168.8.187" autocomplete="off" spellcheck="false">
+          </div>
+          <div>
+            <label for="portInput">WebSocket port</label>
+            <input id="portInput" name="port" type="number" min="1" max="65535" value="8000" inputmode="numeric">
+          </div>
+          <div>
+            <label for="timeoutInput">Timeout ms</label>
+            <input id="timeoutInput" name="timeout" type="number" min="1000" max="30000" step="500" value="5000" inputmode="numeric">
+          </div>
+          <div class="wide">
+            <label for="pathInput">WebSocket path</label>
+            <input id="pathInput" name="path" value="/" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <code id="endpointPreview" class="endpoint-preview"></code>
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <strong>Show diagnostic terminal</strong>
+            <span>Shows raw hex/ASCII traffic and manual transmit controls.</span>
+          </div>
+          <input id="diagnosticsToggle" type="checkbox" aria-label="Show diagnostic terminal">
+        </div>
+        <div class="metric" style="margin-top:12px">
+          <span>Page origin</span>
+          <strong id="browserOrigin">-</strong>
+        </div>
+        <p class="hint">
+          Connection settings and diagnostic visibility are stored in this browser. Program files remain in IndexedDB.
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <button id="settingsCancelButton" type="button">Cancel</button>
+        <button class="primary" type="submit">Save settings</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="src/diagnostics.js"></script>
   <script src="src/transport.js"></script>

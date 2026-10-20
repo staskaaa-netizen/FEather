@@ -7,7 +7,7 @@ TNCweb is a browser-only transport and file-server project for a Heidenhain TNC 
 Milestone 1 provides:
 
 - A byte-oriented `SerialTransport` abstraction.
-- A browser WebSocket transport with a configurable endpoint and bounded connect timeout.
+- A browser WebSocket transport verified against the connected W610 stock page at `ws://192.168.8.187:8000`.
 - Exact binary transmission through `WebSocket.send(Uint8Array)`.
 - ArrayBuffer, Blob, and text receive conversion.
 - Fragmentation-safe receive buffering.
@@ -17,6 +17,8 @@ Milestone 1 provides:
 - Browser tests with a simulated transport and scripted mock TNC.
 
 FE1 directory, upload, download, IndexedDB storage, and a TNC server-active state are deliberately not claimed. The console displays `TNC server inactive — FE1 pending`.
+
+The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 
 ## Run locally
 
@@ -49,6 +51,7 @@ The expected result is `17 passed, 0 failed`.
 - [FE1 protocol status](docs/PROTOCOL.md)
 - [Browser and hardware testing](docs/TESTING.md)
 - [Unverified assumptions](docs/ASSUMPTIONS.md)
+- [20 October 2026 hardware record](docs/HARDWARE-2026-10-20.md)
 
 ## Safety boundary
 

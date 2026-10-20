@@ -28,13 +28,20 @@ Record browser, operating system, W610 firmware, W610 page version, serial setti
 
 ### Stage 1 — Browser to W610
 
-1. Join the W610 network and confirm `http://10.10.100.254/websocket.html` opens.
+1. Join the W610 network and confirm `http://192.168.8.187/websocket.html` opens.
 2. Inspect the stock page’s WebSocket URL, path, subprotocol, outgoing frame types, and incoming frame types.
 3. Enter those exact values into TNCweb and connect.
 4. Confirm the W610 link indicator turns active.
 5. Disconnect and confirm no automatic reconnect occurs.
 
 Pass evidence: screenshot or copied stock-page source and developer-tools WebSocket handshake.
+
+Recorded result on 20 October 2026:
+
+- Edge 155 loaded TNCweb from `file://`.
+- Clicking Connect reached `W610 link active`.
+- The verified endpoint was `ws://192.168.8.187:8000/`.
+- No serial payload was sent during this connection-only test.
 
 ### Stage 2 — W610 to PC serial loopback
 

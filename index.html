@@ -298,14 +298,14 @@
         <section class="panel" aria-labelledby="connectionHeading">
           <div class="panel-head">
             <h2 id="connectionHeading">W610 connection</h2>
-            <span class="log-meta">7E1 · 9600 initial</span>
+            <span class="log-meta">7E1 · baud set on W610</span>
           </div>
           <div class="panel-body">
             <form id="connectionForm">
               <div class="field-grid">
                 <div class="wide">
                   <label for="hostInput">W610 IP or hostname</label>
-                  <input id="hostInput" name="host" value="10.10.100.254" autocomplete="off" spellcheck="false">
+                  <input id="hostInput" name="host" value="192.168.8.187" autocomplete="off" spellcheck="false">
                 </div>
                 <div>
                   <label for="portInput">WebSocket port</label>
@@ -322,8 +322,13 @@
               </div>
               <code id="endpointPreview" class="endpoint-preview" aria-live="polite"></code>
               <p class="notice">
-                Endpoint candidate only. The stock page and WebSocket framing have not been verified against hardware.
-                Open <code>/websocket.html</code> on the W610, inspect its WebSocket constructor, then enter the exact path here.
+                Stock W610 page verified: it opens <code>ws://&lt;host&gt;:8000</code> with no path and requests
+                ArrayBuffer messages. Use binary hex for byte-exact output. Actual serial control-byte integrity and timing
+                still require the loopback test.
+              </p>
+              <p class="hint">
+                Chromium may ask for local-network access. Allow it for this page. If <code>file://</code> is restricted,
+                use <code>serve.ps1</code> and open the app from localhost.
               </p>
               <div class="actions">
                 <button id="connectButton" class="primary" type="submit">Connect</button>

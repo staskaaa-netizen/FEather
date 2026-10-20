@@ -211,6 +211,24 @@
       font-weight: 500;
       overflow-wrap: anywhere;
     }
+    .file-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      padding-top: 7px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .file-row:first-child { border-top: 0; padding-top: 0; }
+    .file-actions { display: flex; gap: 5px; }
+    .file-actions button { padding: 4px 7px; }
     .error-banner {
       display: none;
       border-left-color: var(--bad);
@@ -374,6 +392,10 @@
             <p class="notice" id="transferNotice">
               FE1 directory and selected-program retrieval are active. Manual TX is locked during a file transfer.
             </p>
+            <div>
+              <label style="margin-top:14px">Files stored from TNC</label>
+              <div id="storedFileList" class="file-list">No received files.</div>
+            </div>
           </div>
         </section>
 
@@ -439,6 +461,7 @@
   <script src="src/diagnostics.js"></script>
   <script src="src/transport.js"></script>
   <script src="src/nc-data.js"></script>
+  <script src="src/storage.js"></script>
   <script src="src/fe1.js"></script>
   <script src="src/app.js"></script>
 </body>

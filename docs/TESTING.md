@@ -4,7 +4,7 @@ Document status: 20 October 2026. Transport and FE1 directory tested on the targ
 
 ## Automated browser tests
 
-Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 28 tests:
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 31 tests:
 
 - Hex parsing, control-character naming, and diagnostic export.
 - Configurable endpoint validation.
@@ -25,6 +25,8 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - FE401-type `H100` identifier mapping and the equivalent zero/letter-O request variant.
 - Selected-file BCC validation, line blocking, ACK/NAK retransmission, and ETX/EOT completion.
 - Bundled NC catalog byte lengths and CRLF preservation.
+- Incoming TNC file headers, valid/invalid block BCCs, ACK/NAK responses, and commit-on-ETX behavior.
+- IndexedDB persistence, binary-exact retrieval, and duplicate-name handling.
 
 The WebSocket tests use an injected `FakeWebSocket`. The mock TNC responses use synthetic byte sequences. They validate the browser transport and buffering code; they are **not** documented FE1 examples and do not prove TNC compatibility.
 
@@ -96,6 +98,14 @@ Directory listing is complete for this machine.
 ### Stage 5 — Receive a small program
 
 Use a non-production program. Verify the browser does not acknowledge an invalid block and that a failed receive leaves no stored result. This stage becomes executable only after IndexedDB atomic storage is implemented.
+
+Recorded result on 20 October 2026:
+
+- TNC sent `CRANFINS.H` with an `A` header; 16 blocks were validated and ACKed.
+- TNC sent `CRKFIN.H`; 34 blocks were validated and ACKed.
+- Both ended with ETX/EOT and were saved in IndexedDB.
+- Received files appeared in the browser's stored-file list.
+- The next external directory response included both new programs.
 
 ### Stage 6 — Return the same program
 

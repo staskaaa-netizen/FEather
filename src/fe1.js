@@ -100,6 +100,25 @@
     return `H${base}`;
   }
 
+  function fromFe1DirectoryName(identifier) {
+    if (!/^[A-Z][A-Z0-9_]{1,15}$/.test(identifier)) {
+      throw new RangeError(`Unsupported FE1 program identifier: ${identifier}`);
+    }
+    const extensions = {
+      H: ".H",
+      I: ".I",
+      T: ".T",
+      D: ".D",
+      P: ".P",
+      A: ".A"
+    };
+    const extension = extensions[identifier[0]];
+    if (!extension) {
+      throw new RangeError(`Unsupported FE1 file type: ${identifier[0]}`);
+    }
+    return `${identifier.slice(1)}${extension}`;
+  }
+
   function formatDirectoryRecord(name, sectors, startSector) {
     return `${name.padEnd(15, " ")}${String(sectors).padStart(9, " ")}${String(startSector).padStart(8, " ")}`;
   }
@@ -462,17 +481,206 @@
     }
   }
 
+  function joinReceivedLineBlocks(blocks) {
+    const chunks = [];
+    let totalLength = 0;
+    for (const value of blocks) {
+      const block = TNCWeb.copyBytes(value);
+      chunks.push(block);
+      totalLength += block.byteLength;
+      if (block.byteLength === 0 || (block[block.byteLength - 1] !== CONTROL.CR && block[block.byteLength - 1] !== CONTROL.LF)) {
+        const ending = Uint8Array.from([CONTROL.CR, CONTROL.LF]);
+        chunks.push(ending);
+        totalLength += ending.byteLength;
+      }
+    }
+    return concatenate(chunks, totalLength);
+  }
+
+  class Fe1Receiver {
+    constructor(options) {
+      const settings = options || {};
+      this.onWrite = settings.onWrite || (() => {});
+      this.onStatus = settings.onStatus || (() => {});
+      this.onComplete = settings.onComplete || (() => {});
+      this.onError = settings.onError || (() => {});
+      this.maxBufferedBytes = settings.maxBufferedBytes || 65536;
+      this.buffer = new Uint8Array(0);
+      this.phase = "idle";
+      this.identifier = "";
+      this.filename = "";
+      this.lines = [];
+      this.invalidBlocks = 0;
+    }
+
+    feed(value) {
+      const bytes = TNCWeb.copyBytes(value);
+      if (bytes.byteLength === 0) {
+        return;
+      }
+      this.buffer = concatenate([this.buffer, bytes], this.buffer.byteLength + bytes.byteLength);
+      if (this.phase === "idle") {
+        this._processHeader();
+      }
+      if (this.phase === "receiving") {
+        this._processBlocks();
+      }
+      if (this.buffer.byteLength > this.maxBufferedBytes) {
+        this._fail(TNCWeb.connectionError("Receive buffer limit exceeded.", "RECEIVE_BUFFER_OVERFLOW"));
+      }
+    }
+
+    _processHeader() {
+      const soh = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.SOH]), 0);
+      if (soh === -1) {
+        this.buffer = new Uint8Array(0);
+        return;
+      }
+      if (soh > 0) {
+        this.buffer = this.buffer.slice(soh);
+      }
+      const etb = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.ETB]), 1);
+      if (etb === -1 || this.buffer.byteLength < etb + 2) {
+        return;
+      }
+
+      const expectedBcc = calculateBcc(this.buffer.subarray(0, etb + 1));
+      const receivedBcc = this.buffer[etb + 1];
+      const payload = this.buffer.subarray(1, etb);
+      this.buffer = this.buffer.slice(etb + 2);
+      if (this.buffer[0] === CONTROL.DC1) {
+        this.buffer = this.buffer.slice(1);
+      }
+      if (expectedBcc !== receivedBcc) {
+        this._fail(TNCWeb.connectionError(
+          `Invalid BCC in incoming file header: expected 0x${expectedBcc.toString(16)}, received 0x${receivedBcc.toString(16)}.`,
+          "HEADER_BCC"
+        ));
+        return;
+      }
+      if (payload.byteLength < 2 || payload[payload.byteLength - 1] !== 0x41) {
+        return;
+      }
+
+      try {
+        this.identifier = new TextDecoder("ascii").decode(payload.subarray(0, payload.byteLength - 1)).trim();
+        this.filename = fromFe1DirectoryName(this.identifier);
+      } catch (error) {
+        this._fail(error);
+        return;
+      }
+      this.lines = [];
+      this.invalidBlocks = 0;
+      this.phase = "receiving";
+      this.onStatus({
+        phase: this.phase,
+        identifier: this.identifier,
+        filename: this.filename,
+        lineCount: 0
+      });
+      this.onWrite(Uint8Array.from([CONTROL.ACK]));
+    }
+
+    _processBlocks() {
+      while (this.phase === "receiving" && this.buffer.byteLength > 0) {
+        if (this.buffer[0] === CONTROL.ETX) {
+          this.buffer = this.buffer.slice(1);
+          if (this.buffer[0] === CONTROL.EOT) {
+            this.buffer = this.buffer.slice(1);
+          }
+          this._complete();
+          return;
+        }
+        if (this.buffer[0] === CONTROL.EOT) {
+          this._fail(TNCWeb.connectionError("TNC ended transfer without ETX.", "MISSING_ETX"));
+          return;
+        }
+        if (this.buffer[0] !== CONTROL.STX) {
+          this.buffer = this.buffer.slice(1);
+          continue;
+        }
+        const etb = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.ETB]), 1);
+        if (etb === -1 || this.buffer.byteLength < etb + 2) {
+          return;
+        }
+        const expectedBcc = calculateBcc(this.buffer.subarray(0, etb + 1));
+        const receivedBcc = this.buffer[etb + 1];
+        const payload = this.buffer.subarray(1, etb);
+        let consumed = etb + 2;
+        if (this.buffer[consumed] === CONTROL.DC1) {
+          consumed += 1;
+        }
+        this.buffer = this.buffer.slice(consumed);
+
+        if (expectedBcc !== receivedBcc) {
+          this.invalidBlocks += 1;
+          this.onWrite(Uint8Array.from([CONTROL.NAK]));
+          if (this.invalidBlocks > 3) {
+            this._fail(TNCWeb.connectionError("Too many invalid incoming data blocks.", "BLOCK_BCC_LIMIT"));
+            return;
+          }
+          continue;
+        }
+
+        this.invalidBlocks = 0;
+        this.lines.push(payload.slice());
+        this.onWrite(Uint8Array.from([CONTROL.ACK]));
+        this.onStatus({
+          phase: this.phase,
+          identifier: this.identifier,
+          filename: this.filename,
+          lineCount: this.lines.length
+        });
+      }
+    }
+
+    _complete() {
+      const bytes = joinReceivedLineBlocks(this.lines);
+      const result = {
+        identifier: this.identifier,
+        filename: this.filename,
+        bytes,
+        lineCount: this.lines.length
+      };
+      this.phase = "idle";
+      this.identifier = "";
+      this.filename = "";
+      this.lines = [];
+      this.invalidBlocks = 0;
+      this.onStatus({ phase: "complete", lineCount: result.lineCount, filename: result.filename });
+      this.onComplete(result);
+    }
+
+    _fail(error) {
+      this.onError(error);
+      this.onStatus({ phase: "failed", filename: this.filename, error: error.message });
+      this.reset();
+    }
+
+    reset() {
+      this.buffer = new Uint8Array(0);
+      this.phase = "idle";
+      this.identifier = "";
+      this.filename = "";
+      this.lines = [];
+      this.invalidBlocks = 0;
+    }
+  }
+
   Object.assign(TNCWeb, {
     CONTROL,
     DIRECTORY_REQUEST,
     DIRECTORY_REQUEST_ZERO,
     Fe1DirectoryResponder,
     Fe1FileResponder,
+    Fe1Receiver,
     buildDirectoryResponse,
     byteSequenceIndex,
     calculateBcc,
     encodeDataBlock,
     formatDirectoryRecord,
+    fromFe1DirectoryName,
+    joinReceivedLineBlocks,
     splitFileLines,
     toFe1DirectoryName
   });

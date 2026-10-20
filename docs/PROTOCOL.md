@@ -61,6 +61,29 @@ The BCC is the XOR of every byte from `<STX>` through `<ETB>` inclusive. The sam
 
 The TNC successfully retrieved `CASEBOTT.H` and `CASEBTAP.H` through the browser on 20 October 2026. All line blocks were acknowledged and the final ETX/EOT handshake completed for both programs.
 
+## Implemented TNC-to-browser receive
+
+For a TNC upload, the TNC sends an `A` header:
+
+```text
+<SOH> HCRANFINS A <ETB> BCC
+```
+
+The browser then:
+
+1. Validates the header BCC and sends `<ACK>`.
+2. Buffers each `<STX> line <ETB> BCC` block.
+3. Sends `<ACK>` only after validating the block BCC.
+4. Sends `<NAK>` for invalid blocks and waits for retransmission.
+5. Waits for `<ETX><EOT>` before committing.
+6. Saves the reconstructed file to IndexedDB atomically.
+
+Live verification:
+
+- `CRANFINS.H`: 16 data blocks, every block ACKed, ETX/EOT received.
+- `CRKFIN.H`: 34 data blocks, every block ACKed, ETX/EOT received.
+- Both files were stored and immediately appeared in the next external directory response.
+
 ## Selected-file request captured
 
 After selecting the test program, the TNC sent:

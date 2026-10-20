@@ -6,6 +6,8 @@
     DiagnosticLog,
     Fe1DirectoryResponder,
     Fe1FileResponder,
+    Fe1Receiver,
+    NcStorage,
     WebSocketSerialTransport,
     buildWebSocketEndpoint,
     parseHex,
@@ -15,7 +17,7 @@
   } = window.TNCWeb;
 
   const ncCatalog = Array.isArray(window.TNCWeb.NC_FILES) ? window.TNCWeb.NC_FILES : [];
-  const directoryFiles = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
+  let directoryFiles = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
 
   function decodeBase64(value) {
     const binary = atob(value);
@@ -53,6 +55,7 @@
     error: byId("errorBanner"),
     transferNotice: byId("transferNotice"),
     currentProgram: byId("currentProgram"),
+    storedFileList: byId("storedFileList"),
     sendLockNote: byId("sendLockNote"),
     log: byId("logOutput"),
     logCounter: byId("logCounter"),
@@ -66,6 +69,7 @@
   };
 
   const diagnostics = new DiagnosticLog({ limit: 20000 });
+  const storage = new NcStorage();
   const receiveBuffer = new ByteStreamBuffer({ maxBytes: 4 * 1024 * 1024 });
   const session = {
     transport: null,
@@ -148,6 +152,62 @@
     }
   });
 
+  const receiver = new Fe1Receiver({
+    onWrite: (bytes) => {
+      const transport = session.transport;
+      if (!transport || transport.state !== "open") {
+        throw new Error("W610 transport closed during incoming transfer.");
+      }
+      transport.write(bytes);
+    },
+    onStatus: (status) => {
+      if (status.phase === "receiving") {
+        setTransferActive(true);
+        elements.currentProgram.textContent = `${status.filename} ← TNC`;
+        elements.serverIndicator.dataset.state = "active";
+        elements.serverIndicator.textContent = `Receiving ${status.filename}`;
+        elements.protocolState.textContent = `FE1 RECEIVE · ${status.lineCount} BLOCKS`;
+        elements.transferNotice.textContent = `Receiving ${status.filename} from TNC: ${status.lineCount} committed blocks.`;
+      } else if (status.phase === "complete") {
+        elements.protocolState.textContent = "FE1 RECEIVE COMPLETE · SAVING";
+      } else if (status.phase === "failed") {
+        setTransferActive(false);
+        elements.currentProgram.textContent = "—";
+        elements.serverIndicator.textContent = "TNC FE1 server ready";
+        elements.protocolState.textContent = "FE1 RECEIVE FAILED";
+      }
+    },
+    onComplete: async (result) => {
+      try {
+        const reservedNames = directoryFiles.map((file) => file.name);
+        const record = await storage.saveReceived(result.filename, result.bytes, reservedNames);
+        await refreshStoredFiles();
+        setTransferActive(false);
+        clearError();
+        elements.currentProgram.textContent = record.name;
+        elements.serverIndicator.textContent = `Received · ${record.name}`;
+        elements.protocolState.textContent = "FE1 RECEIVE COMPLETE · SAVED";
+        diagnostics.add("SYSTEM", null, {
+          label: `Saved TNC transfer ${result.filename} as ${record.name} (${result.lineCount} blocks)`
+        });
+      } catch (error) {
+        setTransferActive(false);
+        showError("Incoming file was received but could not be saved.", error);
+        diagnostics.add("SYSTEM", null, {
+          label: "Incoming file storage failed",
+          error: error.message
+        });
+      }
+    },
+    onError: (error) => {
+      showError("TNC-to-browser transfer failed.", error);
+      diagnostics.add("SYSTEM", null, {
+        label: "TNC-to-browser transfer failed",
+        error: error.message
+      });
+    }
+  });
+
   let releaseWebLock = null;
   let fallbackLeaseTimer = null;
   const tabId = typeof crypto.randomUUID === "function"
@@ -201,6 +261,65 @@
   function clearError() {
     elements.error.textContent = "";
     elements.error.classList.remove("visible");
+  }
+
+  function renderStoredFiles(records) {
+    elements.storedFileList.replaceChildren();
+    if (records.length === 0) {
+      elements.storedFileList.textContent = "No received files.";
+      return;
+    }
+    for (const record of records) {
+      const row = document.createElement("div");
+      row.className = "file-row";
+      const label = document.createElement("span");
+      label.textContent = `${record.name} · ${formatBytes(record.size)} · ${new Date(record.updatedAt).toLocaleString()}`;
+      const actions = document.createElement("span");
+      actions.className = "file-actions";
+      const downloadButton = document.createElement("button");
+      downloadButton.type = "button";
+      downloadButton.textContent = "Download";
+      downloadButton.addEventListener("click", () => {
+        download(record.name, new Uint8Array(record.bytes), "application/octet-stream");
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", async () => {
+        if (!window.confirm(`Delete received file ${record.name}?`)) {
+          return;
+        }
+        try {
+          await storage.remove(record.name);
+          await refreshStoredFiles();
+        } catch (error) {
+          showError("Could not delete the received file.", error);
+        }
+      });
+      actions.append(downloadButton, deleteButton);
+      row.append(label, actions);
+      elements.storedFileList.append(row);
+    }
+  }
+
+  async function refreshStoredFiles() {
+    const records = await storage.list();
+    renderStoredFiles(records);
+    const files = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
+    for (const record of records) {
+      const bytes = new Uint8Array(record.bytes);
+      files.push({ name: record.name, size: bytes.byteLength });
+      try {
+        programBytes.set(toFe1DirectoryName(record.name), bytes.slice());
+      } catch (error) {
+        diagnostics.add("SYSTEM", null, {
+          label: `Stored file is not FE1-representable: ${record.name}`,
+          error: error.message
+        });
+      }
+    }
+    directoryFiles = files;
   }
 
   function setLinkState(state, text) {
@@ -330,10 +449,11 @@
       directoryResponder.feed(bytes);
       try {
         fileResponder.feed(bytes);
+        receiver.feed(bytes);
       } catch (error) {
-        showError("FE1 file responder error.", error);
+        showError("FE1 file protocol error.", error);
         diagnostics.add("SYSTEM", null, {
-          label: "FE1 file responder error",
+          label: "FE1 file protocol error",
           error: error.message
         });
       }
@@ -386,6 +506,7 @@
         receiveBuffer.clear();
         directoryResponder.reset();
         fileResponder.reset();
+        receiver.reset();
         elements.connect.disabled = false;
         elements.disconnect.disabled = true;
         updateCounters();
@@ -413,6 +534,7 @@
     receiveBuffer.clear();
     directoryResponder.reset();
     fileResponder.reset();
+    receiver.reset();
     updateCounters();
 
     try {
@@ -565,6 +687,9 @@
     : window.location.origin;
   updateEndpoint();
   updateCounters();
+  refreshStoredFiles().catch((error) => {
+    showError("Received-file storage is unavailable.", error);
+  });
   diagnostics.add("SYSTEM", null, {
     label: "TNCweb Milestone 1 loaded"
   });
@@ -577,7 +702,9 @@
     diagnostics,
     fileResponder,
     receiveBuffer,
+    receiver,
     session,
+    storage,
     setTransferActive
   };
 })();

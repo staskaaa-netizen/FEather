@@ -6,9 +6,11 @@
     DIRECTORY_REQUEST,
     Fe1DirectoryResponder,
     Fe1FileResponder,
+    Fe1Receiver,
     buildDirectoryResponse,
     calculateBcc,
     encodeDataBlock,
+    fromFe1DirectoryName,
     splitFileLines
   } = global.TNCWeb;
 
@@ -139,6 +141,57 @@
     equal(errors.length, 1);
     equal(errors[0].code, "ACK_TIMEOUT");
     equal(responder.phase, "idle");
+  });
+
+  test("FE1 receiver validates blocks and commits only after ETX", () => {
+    const writes = [];
+    const completions = [];
+    const receiver = new Fe1Receiver({
+      onWrite: (bytes) => writes.push(bytes.slice()),
+      onComplete: (result) => completions.push(result)
+    });
+    const headerBase = new TextEncoder().encode("\x01HTESTA\x17");
+    const header = new Uint8Array(headerBase.length + 1);
+    header.set(headerBase);
+    header[header.length - 1] = calculateBcc(headerBase);
+    receiver.feed(header);
+    bytesEqual(writes[0], [0x06]);
+
+    const first = encodeDataBlock(new TextEncoder().encode("0 BEGIN PGM TEST MM"));
+    receiver.feed(first);
+    bytesEqual(writes[1], [0x06]);
+    equal(completions.length, 0);
+    equal(receiver.lines.length, 1);
+
+    const invalid = first.slice();
+    invalid[invalid.length - 2] ^= 0x01;
+    receiver.feed(invalid);
+    bytesEqual(writes[2], [0x15]);
+    equal(receiver.lines.length, 1);
+
+    const second = encodeDataBlock(new TextEncoder().encode("1 END PGM TEST MM"));
+    receiver.feed(second);
+    receiver.feed([0x03, 0x04]);
+    equal(completions.length, 1);
+    equal(completions[0].filename, "TEST.H");
+    equal(
+      new TextDecoder().decode(completions[0].bytes),
+      "0 BEGIN PGM TEST MM\r\n1 END PGM TEST MM\r\n"
+    );
+  });
+
+  test("FE1 receiver maps incoming identifiers and preserves ACK-per-block flow", () => {
+    equal(fromFe1DirectoryName("HCASEBOTT"), "CASEBOTT.H");
+    equal(fromFe1DirectoryName("HCASETOPF"), "CASETOPF.H");
+    const writes = [];
+    const receiver = new Fe1Receiver({ onWrite: (bytes) => writes.push(bytes[0]) });
+    const headerBase = new TextEncoder().encode("\x01HCASEBOTTA\x17");
+    const header = new Uint8Array(headerBase.length + 1);
+    header.set(headerBase);
+    header[header.length - 1] = calculateBcc(headerBase);
+    receiver.feed(header);
+    receiver.feed(encodeDataBlock(new TextEncoder().encode("0 TEST")));
+    bytesEqual([writes[0], writes[1]], [0x06, 0x06]);
   });
 
   test("Multiple coalesced FE1 directory requests receive one response each", () => {

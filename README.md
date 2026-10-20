@@ -17,9 +17,11 @@ Implemented behavior includes:
 - An FE1 plain-text directory responder using the FE401 record format from the TNC technical manual.
 - Live TNC 415 verification of the request, filename mapping, ETX terminator, and EOT acknowledgement.
 - Selected-program retrieval with XOR block-check characters, ACK/NAK handling, bounded retries, and ETX/EOT completion.
+- TNC-to-browser block reception with BCC validation, ACK/NAK, and atomic IndexedDB commit after ETX.
+- A persistent received-file list with Download and Delete controls.
 - Browser tests with a simulated transport and scripted mock TNC.
 
-Program upload, IndexedDB storage, and interrupted-transfer recovery are not yet claimed.
+Complete import/export, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
 
@@ -28,6 +30,10 @@ A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byt
 The live TNC directory test uses FE401 identifiers such as `H100`, which the TNC displays as `100.H`. The eight sample files are mapped as `H` plus the filename without `.H`.
 
 The TNC successfully retrieved `CASEBOTT.H` and `CASEBTAP.H` from the browser. Every line block was acknowledged, the browser ended with ETX, and the TNC returned EOT.
+
+The reverse direction was also verified: the TNC sent `CRANFINS.H` and `CRKFIN.H` to the browser, which validated and acknowledged every block, saved them to IndexedDB, and exposed them for download.
+
+Known display issue: immediately after a TNC-to-browser upload, the TNC may initially show a partial external directory. Reopening the directory displays the complete list; the received files are already committed correctly.
 
 ## Run locally
 
@@ -52,7 +58,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `28 passed, 0 failed`.
+The expected result is `31 passed, 0 failed`.
 
 ## Documentation
 

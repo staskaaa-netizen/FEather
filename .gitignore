@@ -1,0 +1,7 @@
+# Browser/runtime data
+.DS_Store
+Thumbs.db
+
+# Local test output
+tmp/
+test-results/

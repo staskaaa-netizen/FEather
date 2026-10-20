@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>TNCweb browser tests</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #101417;
+      color: #dce4e7;
+      font-family: "Segoe UI", sans-serif;
+    }
+    h1 { font-size: 20px; }
+    body[data-test-status="passed"] h1 { color: #65d28b; }
+    body[data-test-status="failed"] h1 { color: #ff7474; }
+    pre {
+      white-space: pre-wrap;
+      color: #cbd7db;
+      font: 13px/1.55 "Cascadia Mono", Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Milestone 1 browser tests</h1>
+  <pre id="results">Running…</pre>
+  <script src="../src/diagnostics.js"></script>
+  <script src="../src/transport.js"></script>
+  <script src="harness.js"></script>
+  <script src="fake-websocket.js"></script>
+  <script src="mock-tnc.js"></script>
+  <script src="diagnostics.test.js"></script>
+  <script src="transport.test.js"></script>
+  <script src="mock-tnc.test.js"></script>
+  <script src="runner.js"></script>
+</body>
+</html>

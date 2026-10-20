@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>TNCweb — W610 transport console</title>
+  <style>
+    :root {
+      --bg: #111417;
+      --panel: #181d21;
+      --panel-2: #20262b;
+      --line: #343d43;
+      --text: #dde5e8;
+      --muted: #8e9ba2;
+      --accent: #f2b544;
+      --accent-ink: #17120a;
+      --cyan: #64c8d7;
+      --good: #65d28b;
+      --bad: #ff7474;
+      --warn: #ffb65a;
+      --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      --sans: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.025) 25%, transparent 25%) 0 0 / 18px 18px,
+        var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+    }
+
+    button, input, select { font: inherit; }
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: var(--cyan); }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    button.danger { color: var(--bad); }
+    input, select {
+      width: 100%;
+      color: var(--text);
+      background: #101417;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 8px 9px;
+    }
+    input:focus, select:focus, button:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 1px;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: 0 0 5px;
+    }
+    code, pre { font-family: var(--mono); }
+
+    .shell { max-width: 1500px; margin: 0 auto; padding: 18px; }
+    .topbar {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+    }
+    .brand { display: flex; align-items: baseline; gap: 12px; }
+    .brand h1 { margin: 0; font-size: 24px; letter-spacing: 0.02em; }
+    .brand span { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+    .status-strip { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      padding: 6px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .chip::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .chip[data-state="open"]::before,
+    .chip[data-state="active"]::before {
+      background: var(--good);
+      box-shadow: 0 0 8px rgba(101, 210, 139, 0.75);
+    }
+    .chip[data-state="connecting"]::before,
+    .chip[data-state="closing"]::before { background: var(--warn); }
+    .chip[data-state="error"]::before,
+    .chip[data-state="inactive"]::before { background: var(--bad); }
+    .server-lamp {
+      border-color: #634e33;
+      background: #1e1914;
+      color: var(--warn);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.82fr) minmax(500px, 1.8fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .stack { display: grid; gap: 14px; }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent 60px), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-head h2 {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+    .panel-body { padding: 14px; }
+    .field-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 110px;
+      gap: 10px;
+    }
+    .field-grid .wide { grid-column: 1 / -1; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 9px 0 0;
+    }
+    .notice {
+      border-left: 3px solid var(--warn);
+      background: rgba(255, 182, 90, 0.07);
+      color: #e7cfad;
+      line-height: 1.45;
+      padding: 9px 10px;
+      margin: 12px 0 0;
+      font-size: 12px;
+    }
+    .endpoint-preview {
+      display: block;
+      color: var(--cyan);
+      background: #0e1113;
+      border: 1px solid #293137;
+      border-radius: 4px;
+      padding: 7px 8px;
+      margin-top: 8px;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .metric {
+      border: 1px solid #2b3338;
+      background: #14191c;
+      border-radius: 4px;
+      padding: 9px 10px;
+    }
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .metric strong {
+      display: block;
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .error-banner {
+      display: none;
+      border-left-color: var(--bad);
+      background: rgba(255, 116, 116, 0.09);
+      color: #ffc4c4;
+    }
+    .error-banner.visible { display: block; }
+
+    .diagnostic-tools {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 10px;
+    }
+    .send-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .log-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+    .log {
+      height: 430px;
+      overflow: auto;
+      margin: 0;
+      padding: 10px;
+      background: #090c0e;
+      border-top: 1px solid var(--line);
+      color: #c9d5d9;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre;
+      tab-size: 4;
+    }
+    .log .muted { color: var(--muted); }
+    .footer {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      margin-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+    [hidden] { display: none !important; }
+
+    @media (max-width: 930px) {
+      .grid { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .status-strip { justify-content: flex-start; }
+      .diagnostic-tools { grid-template-columns: 1fr; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>TNCweb</h1>
+        <span>W610 transport console · Milestone 1</span>
+      </div>
+      <div class="status-strip" aria-live="polite">
+        <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
+        <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC server inactive — FE1 pending</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="stack">
+        <section class="panel" aria-labelledby="connectionHeading">
+          <div class="panel-head">
+            <h2 id="connectionHeading">W610 connection</h2>
+            <span class="log-meta">7E1 · 9600 initial</span>
+          </div>
+          <div class="panel-body">
+            <form id="connectionForm">
+              <div class="field-grid">
+                <div class="wide">
+                  <label for="hostInput">W610 IP or hostname</label>
+                  <input id="hostInput" name="host" value="10.10.100.254" autocomplete="off" spellcheck="false">
+                </div>
+                <div>
+                  <label for="portInput">WebSocket port</label>
+                  <input id="portInput" name="port" type="number" min="1" max="65535" value="8000" inputmode="numeric">
+                </div>
+                <div>
+                  <label for="timeoutInput">Timeout ms</label>
+                  <input id="timeoutInput" name="timeout" type="number" min="1000" max="30000" step="500" value="5000" inputmode="numeric">
+                </div>
+                <div class="wide">
+                  <label for="pathInput">WebSocket path</label>
+                  <input id="pathInput" name="path" value="/" autocomplete="off" spellcheck="false">
+                </div>
+              </div>
+              <code id="endpointPreview" class="endpoint-preview" aria-live="polite"></code>
+              <p class="notice">
+                Endpoint candidate only. The stock page and WebSocket framing have not been verified against hardware.
+                Open <code>/websocket.html</code> on the W610, inspect its WebSocket constructor, then enter the exact path here.
+              </p>
+              <div class="actions">
+                <button id="connectButton" class="primary" type="submit">Connect</button>
+                <button id="disconnectButton" type="button" disabled>Disconnect</button>
+                <button id="stockPageButton" type="button">Open stock page</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="monitorHeading">
+          <div class="panel-head">
+            <h2 id="monitorHeading">Transfer monitor</h2>
+            <span id="protocolState" class="log-meta">FE1 NOT IMPLEMENTED</span>
+          </div>
+          <div class="panel-body">
+            <div class="metric-grid">
+              <div class="metric">
+                <span>RX bytes</span>
+                <strong id="rxCount">0</strong>
+              </div>
+              <div class="metric">
+                <span>TX bytes</span>
+                <strong id="txCount">0</strong>
+              </div>
+              <div class="metric">
+                <span>Stream buffer</span>
+                <strong id="queueCount">0 B</strong>
+              </div>
+              <div class="metric">
+                <span>Recent RX rate</span>
+                <strong id="speedValue">0 B/s</strong>
+              </div>
+              <div class="metric">
+                <span>Current program</span>
+                <strong>—</strong>
+              </div>
+              <div class="metric">
+                <span>Last activity</span>
+                <strong id="lastActivity">Never</strong>
+              </div>
+            </div>
+            <p class="notice" id="transferNotice">
+              Raw transport milestone only. Manual TX is locked while a future FE1 transfer is active.
+            </p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="originHeading">
+          <div class="panel-head">
+            <h2 id="originHeading">Runtime</h2>
+          </div>
+          <div class="panel-body">
+            <div class="metric">
+              <span>Page origin</span>
+              <strong id="browserOrigin">—</strong>
+            </div>
+            <p class="hint">
+              The browser must remain open and awake. Closing, suspending, or sleeping the page ends this transport session.
+              No reconnect occurs automatically.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="diagnosticHeading">
+        <div class="panel-head">
+          <h2 id="diagnosticHeading">Diagnostic terminal</h2>
+          <div class="log-meta">
+            <span id="logCounter">0 entries</span>
+            <select id="logView" aria-label="Log view">
+              <option value="combined">Combined</option>
+              <option value="hex">HEX</option>
+              <option value="ascii">ASCII</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="diagnostic-tools">
+            <div>
+              <label for="hexInput">Manual hex bytes</label>
+              <div class="send-row">
+                <input id="hexInput" placeholder="01 00 0D 11 13 06" autocomplete="off" spellcheck="false">
+                <button id="sendHexButton" type="button" disabled>Send</button>
+              </div>
+            </div>
+            <button id="clearLogButton" type="button">Clear log</button>
+            <div class="actions" style="margin-top:0">
+              <button id="exportTextButton" type="button">Export text</button>
+              <button id="exportJsonButton" type="button">Export JSON</button>
+            </div>
+          </div>
+          <p class="notice error-banner" id="errorBanner" role="alert"></p>
+          <p class="hint" id="sendLockNote">
+            Binary WebSocket frames are used for transmitted bytes. Received text frames are converted as UTF-8 for diagnostics.
+          </p>
+        </div>
+        <pre id="logOutput" class="log" aria-live="polite">No traffic.</pre>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span>Transport-only build. FE1 directory, upload, and download are deliberately not claimed.</span>
+      <span>Control bytes are logged symbolically when needed: NUL, SOH, STX, ETX, ETB, EOT, ACK, NAK, DC1, DC3.</span>
+    </footer>
+  </main>
+
+  <script src="src/diagnostics.js"></script>
+  <script src="src/transport.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

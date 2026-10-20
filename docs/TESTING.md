@@ -1,0 +1,86 @@
+# Browser and hardware testing
+
+Document status: 20 October 2026, Milestone 1.
+
+## Automated browser tests
+
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 17 tests:
+
+- Hex parsing, control-character naming, and diagnostic export.
+- Configurable endpoint validation.
+- Exact outbound bytes `0x00`–`0x7F`.
+- Fragmented `ArrayBuffer` receive data.
+- Text and Blob receive conversion.
+- Fragmented and coalesced stream buffering.
+- Explicit disconnect behavior.
+- Unexpected connection loss without automatic reconnect.
+- Bounded connection timeout.
+- Invalid URL rejection.
+- Disconnected write rejection.
+- Scripted mock W610 fragmented responses.
+- Mock serial connection loss.
+
+The WebSocket tests use an injected `FakeWebSocket`. The mock TNC responses use synthetic byte sequences. They validate the browser transport and buffering code; they are **not** documented FE1 examples and do not prove TNC compatibility.
+
+## Manual hardware validation
+
+Record browser, operating system, W610 firmware, W610 page version, serial settings, timeout values, exact endpoint, and trace files with every stage.
+
+### Stage 1 — Browser to W610
+
+1. Join the W610 network and confirm `http://10.10.100.254/websocket.html` opens.
+2. Inspect the stock page’s WebSocket URL, path, subprotocol, outgoing frame types, and incoming frame types.
+3. Enter those exact values into TNCweb and connect.
+4. Confirm the W610 link indicator turns active.
+5. Disconnect and confirm no automatic reconnect occurs.
+
+Pass evidence: screenshot or copied stock-page source and developer-tools WebSocket handshake.
+
+### Stage 2 — W610 to PC serial loopback
+
+1. Connect the W610 RS232 port to a PC serial loopback with the intended 7E1 configuration.
+2. Send a small known sequence through TNCweb.
+3. Capture the serial bytes with an independent terminal or analyzer.
+4. Echo data back and compare browser RX to the transmitted bytes.
+
+Pass evidence: browser trace plus independent serial trace.
+
+### Stage 3 — Control and binary integrity
+
+Send and receive:
+
+```text
+00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 11 13 15 17 1A 1B 7F
+00 01 02 ... 7E 7F
+```
+
+Confirm there is no replacement, escaping, UTF-8 expansion, line-ending conversion, or dropped byte. Repeat at 9600, 19200, 38400, and the intended production baud rate.
+
+Failure to preserve bytes immediately blocks FE1 implementation until the stock WebSocket framing is understood.
+
+### Stage 4 — FE1 directory request
+
+Do not run this stage until Milestone 3 has cited FE1 packet semantics. Capture the TNC-entered command, browser TX/RX hex, timestamps, ACK/NAK sequence, and visible TNC result.
+
+### Stage 5 — Receive a small program
+
+Use a non-production program. Verify the browser does not acknowledge an invalid block and that a failed receive leaves no stored result. This stage becomes executable only after IndexedDB atomic storage is implemented.
+
+### Stage 6 — Return the same program
+
+Compare size and BCC at both ends, then byte-compare the stored source and file accepted by the TNC.
+
+### Stage 7 — Larger files and interruption
+
+Repeat with progressively larger files. During a transfer, test DC3 pause/resume, disconnect, timeout, browser sleep, and invalid BCC. Record whether the TNC can recover without manual reset. A reconnect must start a new transfer.
+
+## Latency checks
+
+The current W610 manual states an approximately 40–50 ms Wi-Fi→UART→Wi-Fi loopback delay in its free-framing test (p. 27, §4.3.2). Measure the installed device instead of relying on that figure. Capture at least:
+
+- min, median, and maximum round-trip delay for 1–8 byte requests;
+- delay distribution for 1 KiB and 4 KiB chunks;
+- whether serial free-frame splitting changes message boundaries;
+- behavior with the W610 serial auto-frame settings.
+
+The app uses a 5-second connection timeout by default. FE1 response timeouts remain unspecified until hardware traces establish safe values.

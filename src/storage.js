@@ -136,30 +136,24 @@
     async initialize(seedFiles, seedKey) {
       const db = await this.open();
       const marker = seedKey || "seed-v1";
-      const transaction = db.transaction([this.storeName, "meta"], "readwrite");
-      const done = transactionDone(transaction);
-      const files = transaction.objectStore(this.storeName);
-      const meta = transaction.objectStore("meta");
-      const existingMarker = await requestResult(meta.get(marker));
+      const markerTransaction = db.transaction("meta", "readonly");
+      const markerDone = transactionDone(markerTransaction);
+      const existingMarker = await requestResult(markerTransaction.objectStore("meta").get(marker));
+      await markerDone;
       if (existingMarker) {
-        await done;
         return false;
       }
       for (const file of seedFiles || []) {
         const bytes = TNCWeb.copyBytes(file.bytes);
-        const existing = await requestResult(files.get(file.name));
+        const existing = await this.get(file.name);
         if (!existing) {
-          files.put({
-            name: validateFilename(file.name),
-            size: bytes.byteLength,
-            updatedAt: new Date().toISOString(),
-            source: "bundled",
-            bytes: bytes.buffer
-          });
+          await this.save(file.name, bytes, { source: "bundled" });
         }
       }
-      meta.put({ key: marker, initializedAt: new Date().toISOString() });
-      await done;
+      const markerWrite = db.transaction("meta", "readwrite");
+      const markerWriteDone = transactionDone(markerWrite);
+      markerWrite.objectStore("meta").put({ key: marker, initializedAt: new Date().toISOString() });
+      await markerWriteDone;
       this.dispatchEvent(new CustomEvent("change", {}));
       return true;
     }

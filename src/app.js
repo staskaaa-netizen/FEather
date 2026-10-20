@@ -518,6 +518,7 @@
   }
 
   async function initializeStoredFiles() {
+    await refreshStoredFiles();
     await storage.initialize(ncCatalog.map((file) => ({
       name: file.name,
       bytes: decodeBase64(file.base64)

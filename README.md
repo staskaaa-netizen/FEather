@@ -19,6 +19,7 @@ Implemented behavior includes:
 - Selected-program retrieval with XOR block-check characters, ACK/NAK handling, bounded retries, and ETX/EOT completion.
 - TNC-to-browser block reception with BCC validation, ACK/NAK, and atomic IndexedDB commit after ETX.
 - A persistent received-file list with Download and Delete controls.
+- TNC-requested deletion with an updated external directory handshake.
 - Browser tests with a simulated transport and scripted mock TNC.
 
 Complete import/export, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
@@ -58,7 +59,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `31 passed, 0 failed`.
+The expected result is `32 passed, 0 failed`.
 
 ## Documentation
 
@@ -70,4 +71,4 @@ The expected result is `31 passed, 0 failed`.
 
 ## Safety boundary
 
-This build automatically answers FE1 directory and selected-program retrieval requests. It does not yet accept uploaded programs or persist imported files. Do not use it as a production file server until upload, storage, and interruption recovery are implemented and verified.
+This build automatically answers FE1 directory, retrieval, receive, storage, and delete requests. Rename/replace, complete import/export, quota-edge handling, and interrupted-transfer recovery remain incomplete.

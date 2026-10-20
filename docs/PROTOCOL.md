@@ -98,7 +98,7 @@ Decoded:
 <SOH> H100 E <ETB> "*" <ETX> <EOT>
 ```
 
-This is a BCC-protected request for program `H100`, transfer mode `E` (input). The BCC byte is `0x2A`, ASCII `*`. File retrieval is not yet implemented.
+This is a BCC-protected request for program `H100`, transfer mode `E` (input). The BCC byte is `0x2A`, ASCII `*`.
 
 After selecting `CASEBOTT.H` from the full eight-file list, the TNC sent:
 
@@ -114,13 +114,34 @@ Decoded:
 
 The final `0x02` occupies the BCC position in this capture. This confirms the PC filename to FE401 identifier mapping beyond the synthetic `H100` test.
 
+## Implemented external-file delete
+
+The TNC requests deletion with the escape command:
+
+```text
+13 1B 11 44 20 H C A S E B O T T 0D 0A
+```
+
+Decoded:
+
+```text
+<DC3> <ESC> <DC1> D <SP> HCASEBOTT <CR> <LF>
+```
+
+The browser removes the corresponding stored file from IndexedDB, rebuilds the FE401 directory, and sends it with `<ETX>`. The TNC replies `<EOT>`, which completes the delete operation.
+
+Live verification:
+
+- `HCASEBOTT` was deleted and disappeared from the refreshed directory.
+- `HCBERNG37` was deleted and disappeared from the refreshed directory.
+- Both operations ended with the TNC's EOT acknowledgement.
+
 ## Remaining FE1 work
 
-- Calculate and validate block BCC for file headers and data blocks.
-- Verify ACK/NAK, DC1/DC3, retry, and timeout transitions using live traces.
-- Receive and atomically store files sent by the TNC.
-- Implement IndexedDB-backed file management.
-- Verify the sector-count unit and larger-transfer fragmentation.
+- Implement rename/copy commands if the machine uses them.
+- Verify DC3 pause/resume and deliberate failed-block recovery.
+- Validate larger-file fragmentation and the physical sector-count unit.
+- Complete import/export, replace-with-confirmation, quota handling, and interrupted-transfer recovery.
 
 ## Transport boundary
 

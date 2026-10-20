@@ -5,11 +5,14 @@
     ByteStreamBuffer,
     DiagnosticLog,
     Fe1DirectoryResponder,
+    Fe1DeleteResponder,
     Fe1FileResponder,
     Fe1Receiver,
     NcStorage,
     WebSocketSerialTransport,
+    buildDirectoryResponse,
     buildWebSocketEndpoint,
+    fromFe1DirectoryName,
     parseHex,
     toAnnotatedAscii,
     toFe1DirectoryName,
@@ -208,6 +211,49 @@
     }
   });
 
+  const deleteResponder = new Fe1DeleteResponder({
+    onDelete: async (identifier) => {
+      const filename = fromFe1DirectoryName(identifier);
+      const existing = await storage.get(filename);
+      if (!existing) {
+        throw new Error(`External file does not exist: ${identifier}`);
+      }
+      await storage.remove(filename);
+      await refreshStoredFiles();
+      const transport = session.transport;
+      if (!transport || transport.state !== "open") {
+        throw new Error("W610 transport closed during delete.");
+      }
+      const response = buildDirectoryResponse(directoryFiles, { totalSectors: 3088 });
+      transport.write(response);
+      diagnostics.add("SYSTEM", null, {
+        label: `Deleted ${filename}; sent refreshed external directory`
+      });
+    },
+    onStatus: (status) => {
+      if (status.phase === "deleting") {
+        setTransferActive(true);
+        elements.serverIndicator.textContent = `Deleting ${status.identifier}`;
+        elements.protocolState.textContent = "FE1 DELETE IN PROGRESS";
+      } else if (status.phase === "delete-complete") {
+        setTransferActive(false);
+        elements.serverIndicator.textContent = `Deleted ${status.identifier}`;
+        elements.protocolState.textContent = "FE1 DELETE COMPLETE";
+      } else if (status.phase === "delete-failed") {
+        setTransferActive(false);
+        elements.serverIndicator.textContent = "TNC FE1 server ready";
+        elements.protocolState.textContent = "FE1 DELETE FAILED";
+      }
+    },
+    onError: (error) => {
+      showError("TNC delete request failed.", error);
+      diagnostics.add("SYSTEM", null, {
+        label: "TNC delete request failed",
+        error: error.message
+      });
+    }
+  });
+
   let releaseWebLock = null;
   let fallbackLeaseTimer = null;
   const tabId = typeof crypto.randomUUID === "function"
@@ -306,7 +352,8 @@
   async function refreshStoredFiles() {
     const records = await storage.list();
     renderStoredFiles(records);
-    const files = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
+    const files = [];
+    programBytes.clear();
     for (const record of records) {
       const bytes = new Uint8Array(record.bytes);
       files.push({ name: record.name, size: bytes.byteLength });
@@ -320,6 +367,14 @@
       }
     }
     directoryFiles = files;
+  }
+
+  async function initializeStoredFiles() {
+    await storage.initialize(ncCatalog.map((file) => ({
+      name: file.name,
+      bytes: decodeBase64(file.base64)
+    })), "sample-nc-v1");
+    await refreshStoredFiles();
   }
 
   function setLinkState(state, text) {
@@ -450,6 +505,7 @@
       try {
         fileResponder.feed(bytes);
         receiver.feed(bytes);
+        deleteResponder.feed(bytes);
       } catch (error) {
         showError("FE1 file protocol error.", error);
         diagnostics.add("SYSTEM", null, {
@@ -507,6 +563,7 @@
         directoryResponder.reset();
         fileResponder.reset();
         receiver.reset();
+        deleteResponder.reset();
         elements.connect.disabled = false;
         elements.disconnect.disabled = true;
         updateCounters();
@@ -535,6 +592,7 @@
     directoryResponder.reset();
     fileResponder.reset();
     receiver.reset();
+    deleteResponder.reset();
     updateCounters();
 
     try {
@@ -678,7 +736,7 @@
       : "Binary WebSocket frames are used for transmitted bytes. Received text frames are converted as UTF-8 for diagnostics.";
     elements.transferNotice.textContent = session.transferActive
       ? "An FE transfer is active. Manual terminal input is locked."
-      : "FE1 directory and selected-program retrieval are ready.";
+      : "FE1 directory, retrieval, receive, and delete services are ready.";
     updateCounters();
   }
 
@@ -687,19 +745,20 @@
     : window.location.origin;
   updateEndpoint();
   updateCounters();
-  refreshStoredFiles().catch((error) => {
+  initializeStoredFiles().catch((error) => {
     showError("Received-file storage is unavailable.", error);
   });
   diagnostics.add("SYSTEM", null, {
     label: "TNCweb Milestone 1 loaded"
   });
   diagnostics.add("SYSTEM", null, {
-    label: "FE1 directory and selected-program retrieval are ready"
+    label: "FE1 directory, retrieval, receive, and delete services are ready"
   });
 
   // Exposed for a future FE1 controller and for the browser test harness.
   window.TNCWebConsole = {
     diagnostics,
+    deleteResponder,
     fileResponder,
     receiveBuffer,
     receiver,

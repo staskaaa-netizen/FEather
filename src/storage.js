@@ -47,7 +47,7 @@
       const settings = options || {};
       this.dbName = settings.dbName || "tncweb";
       this.storeName = settings.storeName || "ncFiles";
-      this.version = settings.version || 1;
+      this.version = settings.version || 2;
       this.db = null;
       this.openPromise = null;
     }
@@ -65,6 +65,9 @@
           const db = request.result;
           if (!db.objectStoreNames.contains(this.storeName)) {
             db.createObjectStore(this.storeName, { keyPath: "name" });
+          }
+          if (!db.objectStoreNames.contains("meta")) {
+            db.createObjectStore("meta", { keyPath: "key" });
           }
         });
         request.addEventListener("success", () => {
@@ -120,6 +123,37 @@
       return this.save(duplicateName(validateFilename(name), used), value, {
         source: "tnc"
       });
+    }
+
+    async initialize(seedFiles, seedKey) {
+      const db = await this.open();
+      const marker = seedKey || "seed-v1";
+      const transaction = db.transaction([this.storeName, "meta"], "readwrite");
+      const done = transactionDone(transaction);
+      const files = transaction.objectStore(this.storeName);
+      const meta = transaction.objectStore("meta");
+      const existingMarker = await requestResult(meta.get(marker));
+      if (existingMarker) {
+        await done;
+        return false;
+      }
+      for (const file of seedFiles || []) {
+        const bytes = TNCWeb.copyBytes(file.bytes);
+        const existing = await requestResult(files.get(file.name));
+        if (!existing) {
+          files.put({
+            name: validateFilename(file.name),
+            size: bytes.byteLength,
+            updatedAt: new Date().toISOString(),
+            source: "bundled",
+            bytes: bytes.buffer
+          });
+        }
+      }
+      meta.put({ key: marker, initializedAt: new Date().toISOString() });
+      await done;
+      this.dispatchEvent(new CustomEvent("change", {}));
+      return true;
     }
 
     async remove(name) {

@@ -5,6 +5,7 @@
   const {
     DIRECTORY_REQUEST,
     Fe1DirectoryResponder,
+    Fe1DeleteResponder,
     Fe1FileResponder,
     Fe1Receiver,
     buildDirectoryResponse,
@@ -192,6 +193,21 @@
     receiver.feed(header);
     receiver.feed(encodeDataBlock(new TextEncoder().encode("0 TEST")));
     bytesEqual([writes[0], writes[1]], [0x06, 0x06]);
+  });
+
+  test("FE1 delete responder handles a fragmented TNC delete command", async () => {
+    const deleted = [];
+    const responder = new Fe1DeleteResponder({
+      onDelete: async (identifier) => deleted.push(identifier)
+    });
+    const request = new TextEncoder().encode("\x13\x1b\x11D HCASEBOTT\r\n");
+    responder.feed(request.subarray(0, 4));
+    responder.feed(request.subarray(4, 9));
+    responder.feed(request.subarray(9));
+    await global.TNCWebTest.wait(10);
+    equal(deleted.length, 1);
+    equal(deleted[0], "HCASEBOTT");
+    equal(responder.busy, false);
   });
 
   test("Multiple coalesced FE1 directory requests receive one response each", () => {

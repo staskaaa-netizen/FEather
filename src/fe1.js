@@ -667,11 +667,74 @@
     }
   }
 
+  class Fe1DeleteResponder {
+    constructor(options) {
+      const settings = options || {};
+      this.onDelete = settings.onDelete || (() => {});
+      this.onStatus = settings.onStatus || (() => {});
+      this.onError = settings.onError || (() => {});
+      this.buffer = new Uint8Array(0);
+      this.maxBufferedBytes = settings.maxBufferedBytes || 256;
+      this.busy = false;
+    }
+
+    feed(value) {
+      const bytes = TNCWeb.copyBytes(value);
+      if (bytes.byteLength === 0 || this.busy) {
+        return;
+      }
+      this.buffer = concatenate([this.buffer, bytes], this.buffer.byteLength + bytes.byteLength);
+      const prefix = Uint8Array.from([CONTROL.DC3, CONTROL.ESC, CONTROL.DC1, 0x44, CONTROL.SP]);
+      const start = byteSequenceIndex(this.buffer, prefix, 0);
+      if (start === -1) {
+        this.buffer = this.buffer.slice(Math.max(0, this.buffer.byteLength - prefix.byteLength + 1));
+        return;
+      }
+      if (start > 0) {
+        this.buffer = this.buffer.slice(start);
+      }
+      const cr = byteSequenceIndex(this.buffer, Uint8Array.from([CONTROL.CR]), prefix.byteLength);
+      if (cr === -1 || this.buffer.byteLength < cr + 2 || this.buffer[cr + 1] !== CONTROL.LF) {
+        if (this.buffer.byteLength > this.maxBufferedBytes) {
+          this.buffer = new Uint8Array(0);
+        }
+        return;
+      }
+
+      const identifier = new TextDecoder("ascii")
+        .decode(this.buffer.subarray(prefix.byteLength, cr))
+        .trim();
+      this.buffer = this.buffer.slice(cr + 2);
+      if (!identifier) {
+        return;
+      }
+      this.busy = true;
+      this.onStatus({ phase: "deleting", identifier });
+      Promise.resolve(this.onDelete(identifier))
+        .then(() => {
+          this.onStatus({ phase: "delete-complete", identifier });
+        })
+        .catch((error) => {
+          this.onError(error);
+          this.onStatus({ phase: "delete-failed", identifier, error: error.message });
+        })
+        .finally(() => {
+          this.busy = false;
+        });
+    }
+
+    reset() {
+      this.buffer = new Uint8Array(0);
+      this.busy = false;
+    }
+  }
+
   Object.assign(TNCWeb, {
     CONTROL,
     DIRECTORY_REQUEST,
     DIRECTORY_REQUEST_ZERO,
     Fe1DirectoryResponder,
+    Fe1DeleteResponder,
     Fe1FileResponder,
     Fe1Receiver,
     buildDirectoryResponse,

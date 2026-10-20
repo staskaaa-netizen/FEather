@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>TNCweb - Heidenhain FE1 file server</title>
+  <title>FEather - Heidenhain FE1 file server</title>
   <style>
     :root {
       --bg: #111417;
@@ -355,6 +355,13 @@
       padding: 0;
     }
     .settings-dialog::backdrop { background: rgba(0,0,0,0.72); }
+    .about-copy p {
+      color: #cbd7db;
+      line-height: 1.65;
+      margin: 0 0 13px;
+    }
+    .about-copy p:last-child { margin-bottom: 0; }
+    .about-copy strong { color: var(--text); }
     .dialog-head {
       display: flex;
       justify-content: space-between;
@@ -421,7 +428,7 @@
   <main class="shell">
     <header class="topbar">
       <div class="brand">
-        <h1>TNCweb</h1>
+        <h1>FEather</h1>
         <span>Heidenhain FE1 file server</span>
       </div>
       <div class="connection-bar">
@@ -434,6 +441,7 @@
           <button id="connectButton" class="primary" type="submit">Connect</button>
           <button id="disconnectButton" type="button" disabled>Disconnect</button>
         </form>
+        <button id="aboutButton" type="button">About</button>
         <button id="settingsButton" type="button">Settings</button>
       </div>
     </header>
@@ -535,6 +543,37 @@
       <span>Diagnostics are available from Settings.</span>
     </footer>
   </main>
+
+  <dialog id="aboutDialog" class="settings-dialog">
+    <div class="dialog-head">
+      <h2>Why FEather?</h2>
+      <button id="aboutCloseButton" type="button">Close</button>
+    </div>
+    <div class="dialog-body about-copy">
+      <p>
+        FEather was born out of respect for the engineering behind the older Heidenhain CNC controls.
+      </p>
+      <p>
+        By modern standards, these controllers may seem obscure and outdated. Yet they still work remarkably well,
+        remain convenient to operate, and continue producing plenty of useful parts decades after they were built.
+      </p>
+      <p>
+        The original motivation was simple: replace the dedicated network-connected PC sitting beside my VMC with
+        something smaller and simpler, without modifying the CNC controller itself.
+      </p>
+      <p>
+        FEather does exactly that. A small Wi-Fi serial adapter and a browser-based file server replace the PC, while
+        the machine continues communicating through its familiar FE401 interface.
+      </p>
+      <p>
+        <strong>FEather has been tested on a Heidenhain TNC 415B</strong>, but should also work with other controllers
+        supporting the FE401 protocol. Compatibility with those machines has not yet been verified.
+      </p>
+      <p>
+        Built using official manufacturer documentation.
+      </p>
+    </div>
+  </dialog>
 
   <dialog id="settingsDialog" class="settings-dialog">
     <form id="settingsForm">

@@ -7,7 +7,7 @@ $root = [IO.Path]::GetFullPath((Split-Path -Parent $MyInvocation.MyCommand.Path)
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
 $listener.Start()
 
-Write-Host "TNCweb static host: http://localhost:$Port/"
+Write-Host "FEather static host: http://localhost:$Port/"
 Write-Host "Press Ctrl+C to stop."
 
 try {

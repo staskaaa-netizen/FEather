@@ -1,6 +1,20 @@
-# TNCweb
+# FEather
 
-TNCweb is a browser-only transport and file-server project for a Heidenhain TNC 415 connected through a stock USR-W610 Wi-Fi-to-RS232 bridge. The transport milestone and the FE1 directory portion of the protocol milestone are implemented and hardware-verified.
+FEather is a browser-based FE401 file server for older Heidenhain CNC controls, connected through a stock USR-W610 Wi-Fi-to-RS232 adapter.
+
+## Why FEather?
+
+FEather was born out of respect for the engineering behind the older Heidenhain CNC controls.
+
+By modern standards, these controllers may seem obscure and outdated. Yet they still work remarkably well, remain convenient to operate, and continue producing plenty of useful parts decades after they were built.
+
+The original motivation was simple: replace the dedicated network-connected PC sitting beside my VMC with something smaller and simpler, without modifying the CNC controller itself.
+
+FEather does exactly that. A small Wi-Fi serial adapter and a browser-based file server replace the PC, while the machine continues communicating through its familiar FE401 interface.
+
+**FEather has been tested on a Heidenhain TNC 415B**, but should also work with other controllers supporting the FE401 protocol. Compatibility with those machines has not yet been verified.
+
+Built using official manufacturer documentation.
 
 ## Current milestone
 
@@ -13,7 +27,7 @@ Implemented behavior includes:
 - Fragmentation-safe receive buffering.
 - Explicit disconnect and connection-loss handling with no automatic reconnect.
 - Timestamped hex/ASCII diagnostics, manual hex sending, trace export, and clear.
-- A browser lock that prevents two TNCweb tabs from controlling the serial link at the same time.
+- A browser lock that prevents two FEather tabs from controlling the serial link at the same time.
 - An FE1 plain-text directory responder using the FE401 record format from the TNC technical manual.
 - Live TNC 415 verification of the request, filename mapping, ETX terminator, and EOT acknowledgement.
 - Selected-program retrieval with XOR block-check characters, ACK/NAK handling, bounded retries, and ETX/EOT completion.
@@ -32,7 +46,7 @@ Export-all/restore, rename/replace, full quota handling, and interrupted-transfe
 
 Diagnostics and manual byte transmission are hidden from the main screen. Enable **Show diagnostic terminal** in Settings when raw traffic is required. File contents remain in IndexedDB; connection and display preferences use `localStorage`.
 
-The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; TNCweb does not change converter settings.
+The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; FEather does not change converter settings.
 
 A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
 

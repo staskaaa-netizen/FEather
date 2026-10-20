@@ -56,6 +56,9 @@
     settingsClose: byId("settingsCloseButton"),
     settingsCancel: byId("settingsCancelButton"),
     autoConnectToggle: byId("autoConnectToggle"),
+    about: byId("aboutDialog"),
+    aboutButton: byId("aboutButton"),
+    aboutClose: byId("aboutCloseButton"),
     diagnosticsToggle: byId("diagnosticsToggle"),
     diagnosticsPanel: byId("diagnosticsPanel"),
     protocolState: byId("protocolState"),
@@ -664,7 +667,7 @@
       }, 5000);
       return true;
     } catch (error) {
-      showError("Serial controller lock is unavailable. Keep only one TNCweb tab open and retry.", error);
+      showError("Serial controller lock is unavailable. Keep only one FEather tab open and retry.", error);
       return false;
     }
   }
@@ -789,7 +792,7 @@
 
     try {
       if (!await acquireControllerLock()) {
-        throw new Error("Another browser tab currently owns the TNCweb serial controller.");
+        throw new Error("Another browser tab currently owns the FEather serial controller.");
       }
 
       const url = endpointValue();
@@ -869,11 +872,11 @@
   });
   elements.exportText.addEventListener("click", () => {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    download(`tncweb-trace-${stamp}.txt`, diagnostics.export("text"), "text/plain;charset=utf-8");
+    download(`feather-trace-${stamp}.txt`, diagnostics.export("text"), "text/plain;charset=utf-8");
   });
   elements.exportJson.addEventListener("click", () => {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    download(`tncweb-trace-${stamp}.json`, diagnostics.export("json"), "application/json");
+    download(`feather-trace-${stamp}.json`, diagnostics.export("json"), "application/json");
   });
   elements.logView.addEventListener("change", renderLog);
   elements.previewMode.addEventListener("change", () => {
@@ -883,6 +886,8 @@
     updateEndpoint();
     elements.settings.showModal();
   });
+  elements.aboutButton.addEventListener("click", () => elements.about.showModal());
+  elements.aboutClose.addEventListener("click", () => elements.about.close());
   elements.settingsClose.addEventListener("click", () => elements.settings.close());
   elements.settingsCancel.addEventListener("click", () => elements.settings.close());
   elements.settingsForm.addEventListener("submit", (event) => {
@@ -980,7 +985,7 @@
     showError("Received-file storage is unavailable.", error);
   });
   diagnostics.add("SYSTEM", null, {
-    label: "TNCweb Milestone 1 loaded"
+    label: "FEather Milestone 1 loaded"
   });
   diagnostics.add("SYSTEM", null, {
     label: "FE1 directory, retrieval, receive, and delete services are ready"

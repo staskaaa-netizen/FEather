@@ -90,6 +90,16 @@ If local-network permission is still pending on page open, auto-connect waits an
 
 Firefox may block an HTTPS GitHub Pages document from opening an unencrypted WebSocket to a local address. If that happens, use the offline/local FEather application. Browser restrictions must not be bypassed.
 
+### Windows Edge shortcut troubleshooting
+
+Some Windows installations retain a working side-by-side EdgeCore build even when the usual Edge shortcut and `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe` path are missing. The executable may instead be installed under:
+
+```text
+C:\Program Files (x86)\Microsoft\EdgeCore\<version>\msedge.exe
+```
+
+To restore a desktop shortcut, right-click that `msedge.exe`, choose **Show more options > Send to > Desktop (create shortcut)**. The versioned folder can change after an Edge update; if the shortcut stops working, update it or reinstall Edge from Microsoft's official download page.
+
 No sample NC programs are included in the public repository. Use **Browse files** or drag and drop to add programs to the selected browser origin.
 
 ## Test

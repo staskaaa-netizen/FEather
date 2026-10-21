@@ -116,6 +116,7 @@
   let storedRecords = [];
   let selectedFileName = null;
   let editContext = null;
+  let renumberTimer = null;
   const session = {
     transport: null,
     controllerHeld: false,
@@ -455,7 +456,46 @@
     elements.previewMode.disabled = active;
   }
 
+  function lineMetadata(text, position) {
+    const safePosition = Math.max(0, Math.min(position, text.length));
+    const lineStart = text.lastIndexOf("\n", Math.max(0, safePosition - 1)) + 1;
+    const prefix = text.slice(lineStart).match(/^\s*(?:\/\s*)?\d+\s*/);
+    const prefixLength = prefix ? prefix[0].length : 0;
+    return {
+      lineIndex: text.slice(0, lineStart).split("\n").length - 1,
+      column: Math.max(0, safePosition - lineStart - prefixLength)
+    };
+  }
+
+  function positionFromLineColumn(lines, lineIndex, column) {
+    const safeLine = Math.max(0, Math.min(lineIndex, Math.max(0, lines.length - 1)));
+    const lineStart = lines.slice(0, safeLine).join("\n").length + (safeLine > 0 ? 1 : 0);
+    const prefix = lines[safeLine].match(/^\s*(?:\/\s*)?\d+\s*/);
+    return lineStart + (prefix ? prefix[0].length : 0) + column;
+  }
+
+  function renumberEditor(selectionLines) {
+    if (!editContext || elements.numberingMode.value !== "auto") {
+      return;
+    }
+    const text = elements.fileEditor.value;
+    const startMeta = lineMetadata(text, elements.fileEditor.selectionStart);
+    const endMeta = lineMetadata(text, elements.fileEditor.selectionEnd);
+    const numbered = numberProgramLines(text, 0).replace(/\r\n/g, "\n");
+    elements.fileEditor.value = numbered;
+    const lines = numbered.split("\n");
+    const startLine = selectionLines ? selectionLines.start : startMeta.lineIndex;
+    const endLine = selectionLines ? selectionLines.end : endMeta.lineIndex;
+    const startColumn = selectionLines ? 0 : startMeta.column;
+    const endColumn = selectionLines ? lines[endLine].replace(/^\s*(?:\/\s*)?\d+\s*/, "").length : endMeta.column;
+    elements.fileEditor.setSelectionRange(
+      positionFromLineColumn(lines, startLine, startColumn),
+      positionFromLineColumn(lines, endLine, endColumn)
+    );
+  }
+
   function startEditing(text, context) {
+    clearTimeout(renumberTimer);
     editContext = Object.assign({
       recordName: null,
       saveName: "PROGRAM.H",
@@ -468,10 +508,14 @@
       ? `Converted with ${editContext.warnings.length} warning${editContext.warnings.length === 1 ? "" : "s"}. Review marked source lines.`
       : "Edit blocks, move selected lines, then save.";
     setEditingMode(true);
+    if (elements.numberingMode.value === "auto") {
+      renumberEditor();
+    }
     elements.fileEditor.focus();
   }
 
   function cancelEditing() {
+    clearTimeout(renumberTimer);
     editContext = null;
     setEditingMode(false);
     renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
@@ -552,9 +596,13 @@
     const target = direction < 0 ? startLine - 1 : startLine + 1;
     lines.splice(target, 0, ...selected);
     elements.fileEditor.value = lines.join("\n");
-    const newStart = lines.slice(0, target).join("\n").length + (target > 0 ? 1 : 0);
-    const movedText = selected.join("\n");
-    elements.fileEditor.setSelectionRange(newStart, newStart + movedText.length);
+    if (elements.numberingMode.value === "auto") {
+      renumberEditor({ start: target, end: target + selected.length - 1 });
+    } else {
+      const newStart = lines.slice(0, target).join("\n").length + (target > 0 ? 1 : 0);
+      const movedText = selected.join("\n");
+      elements.fileEditor.setSelectionRange(newStart, newStart + movedText.length);
+    }
     elements.fileEditor.focus();
   }
 
@@ -1057,6 +1105,18 @@
   elements.cancelEdit.addEventListener("click", cancelEditing);
   elements.moveUp.addEventListener("click", () => moveSelectedLines(-1));
   elements.moveDown.addEventListener("click", () => moveSelectedLines(1));
+  elements.numberingMode.addEventListener("change", () => {
+    if (elements.numberingMode.value === "auto") {
+      renumberEditor();
+    }
+  });
+  elements.fileEditor.addEventListener("input", () => {
+    if (!editContext || elements.numberingMode.value !== "auto") {
+      return;
+    }
+    clearTimeout(renumberTimer);
+    renumberTimer = setTimeout(() => renumberEditor(), 180);
+  });
   elements.convertGCode.addEventListener("click", openGCodeDialog);
   elements.gcodeClose.addEventListener("click", () => elements.gcodeDialog.close());
   elements.gcodeCancel.addEventListener("click", () => elements.gcodeDialog.close());

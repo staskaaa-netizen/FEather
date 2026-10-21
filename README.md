@@ -98,7 +98,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
 & 'C:\Program Files (x86)\Microsoft\EdgeCore\155.0.4283.62\msedge.exe' `
   --headless=new --disable-gpu --allow-file-access-from-files `
   --virtual-time-budget=5000 --dump-dom `
-  'file:///C:/acc/webremo/tests/test-runner.html'
+  'file:///C:/acc/FEather/tests/test-runner.html'
 ```
 
 The expected result is `40 passed, 0 failed`.

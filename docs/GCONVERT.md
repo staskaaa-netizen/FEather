@@ -42,7 +42,7 @@ used in the generated L program. Not every ignored word is guaranteed to
 produce a warning. Unsupported G-codes are retained as comments, but the
 result should still be checked line by line.
 
-## FreeCAD reference
+## FreeCAD experiment
 
 FreeCAD 1.1.3 was found locally with:
 
@@ -50,11 +50,41 @@ FreeCAD 1.1.3 was found locally with:
 C:\Program Files\FreeCAD 1.1\Mod\CAM\Path\Post\scripts\heidenhain_post.py
 ```
 
-That file is a three-axis Heidenhain postprocessor for FreeCAD CAM Path
-objects. It can emit linear moves, arcs, drilling cycles, tool calls, labels,
-and optional cutter compensation from FreeCAD toolpaths. It does not provide a
-standalone generic G-code import-to-L conversion workflow, and FEather does not
-embed or copy it.
+FreeCAD also includes G-code preprocessors, and its internal `Path.Command`
+representation is essentially parsed G-code. Therefore, importing ordinary
+G-code before postprocessing is technically possible. A local headless probe
+on 21 October 2026 tested this route with ordinary G0/G1/G2 input.
+
+The probe converted the commands and produced recognizable Heidenhain blocks,
+including:
+
+```text
+L X0.000 Y0.000 Z5.000 R0 F8000 M3
+L X20.000 Y10.000 R0 F250 M
+CC X25.000 Y10.000
+C X30.000 Y10.000 DR- R0 F250 M
+```
+
+It also exposed blockers in the bundled FreeCAD 1.1.3 post:
+
+- The script still references removed FreeCAD module names, so compatibility aliases were required before it would run.
+- A legacy compensation guard skipped all motion unless another workaround was applied.
+- The generated header omitted the program name.
+- Some motion lines ended with an incomplete `M`.
+- Feed and spindle commands were synthesized by the post instead of faithfully preserving the source program.
+- Source comments and ordinary M commands were not reliably carried through.
+
+The current upstream FreeCAD Heidenhain post has been substantially rewritten
+and supports a much broader command set, including arcs, fixtures, cutter
+compensation, dwell, drilling and tapping cycles, coolant, tool calls, and
+legacy TNC cycle formats. That newer implementation depends on FreeCAD machine
+post APIs not shipped with FreeCAD 1.1.3, so it cannot be copied unchanged into
+the installed version or run in a static web page.
+
+FreeCAD's postprocessor is therefore a useful reference for a future portable
+L-code converter, but FEather does not embed or call it. The bundled 1.1.3
+version is not considered output-safe for arbitrary G-code without a dedicated
+compatibility layer and extensive validation.
 
 For production programs requiring those CAM features, generate the Heidenhain
 program with a controller-specific postprocessor rather than relying on

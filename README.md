@@ -66,7 +66,7 @@ The built-in converter is intentionally limited to short, already-postprocessed 
 
 It does not convert inches, modal-only coordinate lines, `R`-format arcs, helical or non-XY arcs, cutter compensation, work offsets, drilling/canned cycles, additional axes, lathes, subprograms, macros, or parametric code. It does not create or validate tool tables, and M codes are not checked against a specific TNC configuration.
 
-Converted output should always be reviewed and simulated before machine execution. See [G-code conversion scope](docs/GCONVERT.md) for the complete matrix, limitations, and the inspected FreeCAD postprocessor reference.
+Converted output should always be reviewed and simulated before machine execution. See [G-code conversion scope](docs/GCONVERT.md) for the complete matrix, limitations, and the resulting FreeCAD compatibility experiment.
 
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; FEather does not change converter settings.
 

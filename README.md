@@ -52,7 +52,7 @@ The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Co
 
 A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.
 
-The live TNC directory test uses FE401 identifiers such as `H100`, which the TNC displays as `100.H`. The eight sample files are mapped as `H` plus the filename without `.H`.
+The live TNC directory test uses FE401 identifiers such as `H100`, which the TNC displays as `100.H`. Imported `.H` files are mapped to an `H` prefix plus the filename without the extension.
 
 The TNC successfully retrieved `CASEBOTT.H` and `CASEBTAP.H` from the browser. Every line block was acknowledged, the browser ended with ETX, and the TNC returned EOT.
 
@@ -60,9 +60,17 @@ The reverse direction was also verified: the TNC sent `CRANFINS.H` and `CRKFIN.H
 
 Known display issue: immediately after a TNC-to-browser upload, the TNC may initially show a partial external directory. Reopening the directory displays the complete list; the received files are already committed correctly.
 
-## Run locally
+## Usage
 
-Open [index.html](index.html) directly in Firefox or a Chromium-based browser. The current milestone uses classic scripts and has no build step. The browser must remain open and the computer must remain awake.
+### Online
+
+Open [https://staskaaa-netizen.github.io/FEather/](https://staskaaa-netizen.github.io/FEather/) in a supported browser.
+
+The GitHub Pages deployment is completely static. Files stay in that origin's IndexedDB and are never uploaded to GitHub. Files stored under `file://` or `localhost` do not automatically migrate to the GitHub Pages origin.
+
+### Offline or local
+
+Open [index.html](index.html) directly in Firefox or a Chromium-based browser. The application uses classic scripts, has no build step, and keeps its existing local workflow. The browser must remain open and the computer must remain awake.
 
 If a browser blocks a needed feature on `file://`, run the built-in static host:
 
@@ -71,6 +79,16 @@ If a browser blocks a needed feature on `file://`, run the built-in static host:
 ```
 
 Then open `http://localhost:8080/`. This server only serves static files; it is not a runtime TNC endpoint.
+
+## Browser access to the W610
+
+The GitHub Pages application connects directly to the configured private-IP `ws://...` endpoint. It never substitutes `wss://`.
+
+Chromium versions implementing Local Network Access may prompt for permission when FEather first connects. FEather checks `local-network` / `local-network-access`, performs one local probe to trigger the permission flow where supported, and then opens the WebSocket. The WebSocket constructor itself does not accept `targetAddressSpace`; that option is used only on the initial `fetch()` probe.
+
+Firefox may block an HTTPS GitHub Pages document from opening an unencrypted WebSocket to a local address. If that happens, use the offline/local FEather application. Browser restrictions must not be bypassed.
+
+No sample NC programs are included in the public repository. Use **Browse files** or drag and drop to add programs to the selected browser origin.
 
 ## Test
 
@@ -83,7 +101,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `37 passed, 0 failed`.
+The expected result is `40 passed, 0 failed`.
 
 ## Documentation
 

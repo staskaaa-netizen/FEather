@@ -54,6 +54,20 @@ Export-all/restore, rename/replace, full quota handling, and interrupted-transfe
 
 Diagnostics and manual byte transmission are hidden from the main screen. Enable **Show diagnostic terminal** in Settings when raw traffic is required. File contents remain in IndexedDB; connection and display preferences use `localStorage`.
 
+### G-code converter scope
+
+The built-in converter is intentionally limited to short, already-postprocessed three-axis mill programs. It can convert:
+
+- `G0` / `G1` moves using `X`, `Y`, and `Z`.
+- XY-plane `G2` / `G3` arcs using `I` / `J`.
+- `G90` absolute and `G91` incremental coordinates.
+- Supported setup modes `G21`, `G17`, `G40`, and `G94`.
+- Feed rates, comments, basic `M6` tool calls using preceding `T` / `S`, and other M codes passed through syntactically.
+
+It does not convert inches, modal-only coordinate lines, `R`-format arcs, helical or non-XY arcs, cutter compensation, work offsets, drilling/canned cycles, additional axes, lathes, subprograms, macros, or parametric code. It does not create or validate tool tables, and M codes are not checked against a specific TNC configuration.
+
+Converted output should always be reviewed and simulated before machine execution. See [G-code conversion scope](docs/GCONVERT.md) for the complete matrix, limitations, and the inspected FreeCAD postprocessor reference.
+
 The inspected W610 stores `38400 7E1`, transparent mode, and no flow control. Configure the TNC to match the W610 baud rate; FEather does not change converter settings.
 
 A DB9 pins 2–3 loopback test on 20 October 2026 returned every transmitted byte exactly, including all values from `0x00` through `0x7F`. Twenty one-byte round trips measured 6 ms minimum, 12 ms median, and 28 ms maximum.

@@ -614,8 +614,18 @@
           <input id="gcodeProgramName" maxlength="15" value="GCONV" autocomplete="off" spellcheck="false">
         </div>
         <p class="hint">
-          Supports basic G0/G1 motion, G2/G3 XY arcs with I/J, G90/G91, common M commands, and comments.
-          Unsupported words are reported and retained as comments rather than silently mistranslated.
+          <strong>Supported:</strong> G0/G1 with X/Y/Z, XY arcs using G2/G3 with I/J, G90/G91,
+          G21/G17/G40/G94 setup modes, feed rates, basic M6 tool calls, other M codes passed through,
+          and comments.
+        </p>
+        <p class="hint">
+          <strong>Not converted:</strong> inches, modal-only coordinate lines, R-format or helical arcs,
+          cutter compensation, work offsets, drilling/canned cycles, additional axes, lathes,
+          subprograms, macros, or parametric code.
+        </p>
+        <p class="hint">
+          Tool tables and TNC-specific M-code behavior are not validated. Unsupported G-codes are retained
+          as comments, but every converted program must be reviewed and simulated before machine execution.
         </p>
         <p id="gcodeStatus" class="hint" aria-live="polite"></p>
       </div>

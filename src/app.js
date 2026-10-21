@@ -546,9 +546,6 @@
       return;
     }
 
-    if (editContext.recordName && !window.confirm(`Overwrite ${editContext.recordName}?`)) {
-      return;
-    }
     try {
       const bytes = new TextEncoder().encode(text);
       let saved;

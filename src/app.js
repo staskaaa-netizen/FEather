@@ -1098,8 +1098,23 @@
     }
     editContext.dirty = editContext.originalText === null || elements.fileEditor.value !== editContext.originalText;
     elements.filePreviewName.textContent = `${editContext.saveName} *`;
-    clearTimeout(renumberTimer);
-    renumberTimer = setTimeout(() => renumberEditor(), 180);
+  });
+  elements.fileEditor.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && editContext) {
+      clearTimeout(renumberTimer);
+      renumberTimer = setTimeout(() => renumberEditor(), 0);
+    }
+  });
+  elements.fileEditor.addEventListener("paste", () => {
+    if (editContext) {
+      clearTimeout(renumberTimer);
+      renumberTimer = setTimeout(() => renumberEditor(), 0);
+    }
+  });
+  elements.fileEditor.addEventListener("blur", () => {
+    if (editContext) {
+      renumberEditor();
+    }
   });
   elements.convertGCode.addEventListener("click", openGCodeDialog);
   elements.gcodeClose.addEventListener("click", () => elements.gcodeDialog.close());

@@ -515,7 +515,11 @@
       ? `Converted with ${editContext.warnings.length} warning${editContext.warnings.length === 1 ? "" : "s"}. Review marked source lines.`
       : "Edit blocks, move selected lines, then save.";
     setEditingMode(true);
+    const initiallyDirty = editContext.dirty;
     renumberEditor();
+    editContext.dirty = initiallyDirty;
+    editContext.originalText = initiallyDirty ? null : elements.fileEditor.value;
+    elements.filePreviewName.textContent = `${editContext.saveName}${initiallyDirty ? " *" : ""}`;
     elements.fileEditor.focus();
   }
 
@@ -591,6 +595,8 @@
     editContext.dirty = true;
     elements.filePreviewName.textContent = `${editContext.saveName} *`;
     renumberEditor({ start: target, end: target + selected.length - 1 });
+    editContext.dirty = editContext.originalText === null || elements.fileEditor.value !== editContext.originalText;
+    elements.filePreviewName.textContent = `${editContext.saveName}${editContext.dirty ? " *" : ""}`;
     elements.fileEditor.focus();
   }
 
@@ -1090,7 +1096,7 @@
     if (!editContext) {
       return;
     }
-    editContext.dirty = true;
+    editContext.dirty = editContext.originalText === null || elements.fileEditor.value !== editContext.originalText;
     elements.filePreviewName.textContent = `${editContext.saveName} *`;
     clearTimeout(renumberTimer);
     renumberTimer = setTimeout(() => renumberEditor(), 180);

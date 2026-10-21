@@ -40,7 +40,7 @@ Implemented behavior includes:
 - Persistent non-file settings in `localStorage`.
 - A top connection bar with an auto-connect option that makes one attempt and does not poll.
 - A left browser-file list, selected-file preview, and compact floating transfer monitor.
-- Quick text editing with preserved or live auto-numbering and line-range movement.
+- Direct text editing with preserved or live auto-numbering, line-range movement, and explicit Save.
 - A basic, warning-driven G-code to Heidenhain L-code converter.
 - Browser tests with a simulated transport and scripted mock TNC.
 

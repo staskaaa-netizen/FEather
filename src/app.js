@@ -81,9 +81,7 @@
     fileEditor: byId("fileEditor"),
     previewMode: byId("previewMode"),
     numberingMode: byId("numberingMode"),
-    editFile: byId("editFileButton"),
     saveFile: byId("saveFileButton"),
-    cancelEdit: byId("cancelEditButton"),
     moveUp: byId("moveUpButton"),
     moveDown: byId("moveDownButton"),
     convertGCode: byId("convertGCodeButton"),
@@ -414,10 +412,9 @@
   }
 
   function renderFilePreview(record) {
-    if (editContext) {
-      return;
-    }
     if (!record) {
+      editContext = null;
+      setEditingMode(false);
       elements.filePreviewName.textContent = "Select a file";
       elements.filePreviewMeta.textContent = "Choose a program from the list.";
       elements.filePreview.textContent = "No file selected.";
@@ -427,6 +424,8 @@
     elements.filePreviewName.textContent = record.name;
     elements.filePreviewMeta.textContent = `${formatBytes(bytes.byteLength)} · ${new Date(record.updatedAt).toLocaleString()}`;
     if (elements.previewMode.value === "hex") {
+      editContext = null;
+      setEditingMode(false);
       const lines = [];
       for (let offset = 0; offset < bytes.byteLength; offset += 16) {
         const chunk = bytes.subarray(offset, offset + 16);
@@ -437,8 +436,17 @@
       return;
     }
     try {
-      elements.filePreview.textContent = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      startEditing(text, {
+        recordName: record.name,
+        saveName: record.name,
+        source: record.source,
+        dirty: false
+      });
     } catch (error) {
+      editContext = null;
+      setEditingMode(false);
+      elements.filePreview.hidden = false;
       elements.filePreview.textContent = "This file is not valid text. Switch the preview to HEX.";
     }
   }
@@ -446,14 +454,10 @@
   function setEditingMode(active) {
     elements.fileEditor.hidden = !active;
     elements.filePreview.hidden = active;
-    elements.editFile.hidden = active;
-    elements.convertGCode.hidden = active;
     elements.saveFile.hidden = !active;
-    elements.cancelEdit.hidden = !active;
     elements.moveUp.hidden = !active;
     elements.moveDown.hidden = !active;
     elements.numberingMode.hidden = !active;
-    elements.previewMode.disabled = active;
   }
 
   function lineMetadata(text, position) {
@@ -482,6 +486,10 @@
     const startMeta = lineMetadata(text, elements.fileEditor.selectionStart);
     const endMeta = lineMetadata(text, elements.fileEditor.selectionEnd);
     const numbered = numberProgramLines(text, 0).replace(/\r\n/g, "\n");
+    if (numbered !== text) {
+      editContext.dirty = true;
+      elements.filePreviewName.textContent = `${editContext.saveName} *`;
+    }
     elements.fileEditor.value = numbered;
     const lines = numbered.split("\n");
     const startLine = selectionLines ? selectionLines.start : startMeta.lineIndex;
@@ -500,10 +508,11 @@
       recordName: null,
       saveName: "PROGRAM.H",
       source: "import",
-      warnings: []
+      warnings: [],
+      dirty: true
     }, context || {});
     elements.fileEditor.value = String(text).replace(/\r\n?/g, "\n");
-    elements.filePreviewName.textContent = `${editContext.saveName} [editing]`;
+    elements.filePreviewName.textContent = `${editContext.saveName}${editContext.dirty ? " *" : ""}`;
     elements.filePreviewMeta.textContent = editContext.warnings.length
       ? `Converted with ${editContext.warnings.length} warning${editContext.warnings.length === 1 ? "" : "s"}. Review marked source lines.`
       : "Edit blocks, move selected lines, then save.";
@@ -512,13 +521,6 @@
       renumberEditor();
     }
     elements.fileEditor.focus();
-  }
-
-  function cancelEditing() {
-    clearTimeout(renumberTimer);
-    editContext = null;
-    setEditingMode(false);
-    renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
   }
 
   async function saveEditing() {
@@ -563,7 +565,6 @@
       }
       selectedFileName = saved.name;
       editContext = null;
-      setEditingMode(false);
       await refreshStoredFiles();
       elements.importStatus.textContent = `Saved ${saved.name}.`;
       clearError();
@@ -596,6 +597,8 @@
     const target = direction < 0 ? startLine - 1 : startLine + 1;
     lines.splice(target, 0, ...selected);
     elements.fileEditor.value = lines.join("\n");
+    editContext.dirty = true;
+    elements.filePreviewName.textContent = `${editContext.saveName} *`;
     if (elements.numberingMode.value === "auto") {
       renumberEditor({ start: target, end: target + selected.length - 1 });
     } else {
@@ -607,8 +610,7 @@
   }
 
   function selectStoredFile(name) {
-    if (editContext) {
-      showError("Save or cancel the current edit before selecting another file.");
+    if (editContext?.dirty && !window.confirm("Discard unsaved changes?")) {
       return;
     }
     selectedFileName = name;
@@ -687,7 +689,9 @@
       row.append(label, actions);
       elements.storedFileList.append(row);
     }
-    renderFilePreview(records.find((record) => record.name === selectedFileName) || null);
+    if (!editContext?.dirty) {
+      renderFilePreview(records.find((record) => record.name === selectedFileName) || null);
+    }
   }
 
   async function refreshStoredFiles() {
@@ -727,6 +731,10 @@
     if (files.length === 0) {
       return;
     }
+    if (editContext?.dirty && !window.confirm("Discard unsaved changes before importing files?")) {
+      return;
+    }
+    editContext = null;
     if (session.transferActive) {
       showError("Wait for the active FE transfer to finish before importing files.");
       return;
@@ -762,25 +770,10 @@
     }
   }
 
-  function editSelectedFile() {
-    const record = storedRecords.find((item) => item.name === selectedFileName);
-    if (!record) {
-      showError("Select a browser file before editing.");
+  function openGCodeDialog() {
+    if (editContext?.dirty && !window.confirm("Discard unsaved changes before converting G-code?")) {
       return;
     }
-    try {
-      const text = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(record.bytes));
-      startEditing(text, {
-        recordName: record.name,
-        saveName: record.name,
-        source: record.source
-      });
-    } catch (error) {
-      showError("This file is not editable text.", error);
-    }
-  }
-
-  function openGCodeDialog() {
     const selected = storedRecords.find((item) => item.name === selectedFileName);
     const base = selected ? selected.name.replace(/\.[^.]+$/, "") : "GCONV";
     elements.gcodeProgramName.value = base.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 15) || "GCONV";
@@ -1098,11 +1091,14 @@
   });
   elements.logView.addEventListener("change", renderLog);
   elements.previewMode.addEventListener("change", () => {
+    if (editContext?.dirty && !window.confirm("Discard unsaved changes and switch preview mode?")) {
+      elements.previewMode.value = "text";
+      return;
+    }
+    editContext = null;
     renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
   });
-  elements.editFile.addEventListener("click", editSelectedFile);
   elements.saveFile.addEventListener("click", saveEditing);
-  elements.cancelEdit.addEventListener("click", cancelEditing);
   elements.moveUp.addEventListener("click", () => moveSelectedLines(-1));
   elements.moveDown.addEventListener("click", () => moveSelectedLines(1));
   elements.numberingMode.addEventListener("change", () => {
@@ -1111,7 +1107,12 @@
     }
   });
   elements.fileEditor.addEventListener("input", () => {
-    if (!editContext || elements.numberingMode.value !== "auto") {
+    if (!editContext) {
+      return;
+    }
+    editContext.dirty = true;
+    elements.filePreviewName.textContent = `${editContext.saveName} *`;
+    if (elements.numberingMode.value !== "auto") {
       return;
     }
     clearTimeout(renumberTimer);
@@ -1210,7 +1211,11 @@
     }
   }, 1000);
 
-  window.addEventListener("beforeunload", () => {
+  window.addEventListener("beforeunload", (event) => {
+    if (editContext?.dirty) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
     saveSettings();
     if (session.transport && session.transport.socket) {
       try {

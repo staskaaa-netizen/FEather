@@ -80,7 +80,6 @@
     filePreview: byId("filePreview"),
     fileEditor: byId("fileEditor"),
     previewMode: byId("previewMode"),
-    numberingMode: byId("numberingMode"),
     saveFile: byId("saveFileButton"),
     moveUp: byId("moveUpButton"),
     moveDown: byId("moveDownButton"),
@@ -457,7 +456,6 @@
     elements.saveFile.hidden = !active;
     elements.moveUp.hidden = !active;
     elements.moveDown.hidden = !active;
-    elements.numberingMode.hidden = !active;
   }
 
   function lineMetadata(text, position) {
@@ -479,7 +477,7 @@
   }
 
   function renumberEditor(selectionLines) {
-    if (!editContext || elements.numberingMode.value !== "auto") {
+    if (!editContext) {
       return;
     }
     const text = elements.fileEditor.value;
@@ -517,9 +515,7 @@
       ? `Converted with ${editContext.warnings.length} warning${editContext.warnings.length === 1 ? "" : "s"}. Review marked source lines.`
       : "Edit blocks, move selected lines, then save.";
     setEditingMode(true);
-    if (elements.numberingMode.value === "auto") {
-      renumberEditor();
-    }
+    renumberEditor();
     elements.fileEditor.focus();
   }
 
@@ -532,12 +528,7 @@
       return;
     }
 
-    let text = elements.fileEditor.value.replace(/\r\n?/g, "\n");
-    if (elements.numberingMode.value === "auto") {
-      text = numberProgramLines(text, 0);
-    } else {
-      text = text.replace(/\n/g, "\r\n");
-    }
+    let text = numberProgramLines(elements.fileEditor.value.replace(/\r\n?/g, "\n"), 0);
     if (!text.endsWith("\r\n")) {
       text += "\r\n";
     }
@@ -599,13 +590,7 @@
     elements.fileEditor.value = lines.join("\n");
     editContext.dirty = true;
     elements.filePreviewName.textContent = `${editContext.saveName} *`;
-    if (elements.numberingMode.value === "auto") {
-      renumberEditor({ start: target, end: target + selected.length - 1 });
-    } else {
-      const newStart = lines.slice(0, target).join("\n").length + (target > 0 ? 1 : 0);
-      const movedText = selected.join("\n");
-      elements.fileEditor.setSelectionRange(newStart, newStart + movedText.length);
-    }
+    renumberEditor({ start: target, end: target + selected.length - 1 });
     elements.fileEditor.focus();
   }
 
@@ -1101,20 +1086,12 @@
   elements.saveFile.addEventListener("click", saveEditing);
   elements.moveUp.addEventListener("click", () => moveSelectedLines(-1));
   elements.moveDown.addEventListener("click", () => moveSelectedLines(1));
-  elements.numberingMode.addEventListener("change", () => {
-    if (elements.numberingMode.value === "auto") {
-      renumberEditor();
-    }
-  });
   elements.fileEditor.addEventListener("input", () => {
     if (!editContext) {
       return;
     }
     editContext.dirty = true;
     elements.filePreviewName.textContent = `${editContext.saveName} *`;
-    if (elements.numberingMode.value !== "auto") {
-      return;
-    }
     clearTimeout(renumberTimer);
     renumberTimer = setTimeout(() => renumberEditor(), 180);
   });

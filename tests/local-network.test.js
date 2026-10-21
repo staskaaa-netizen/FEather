@@ -4,6 +4,7 @@
   const { test, equal, includes, rejects } = global.TNCWebTest;
   const {
     isPrivateHostname,
+    permissionNamesForHostname,
     prepareLocalNetworkAccess
   } = global.TNCWeb;
 
@@ -16,27 +17,30 @@
     equal(isPrivateHostname("example.com"), false);
   });
 
-  test("Local Network Access requests permission with a local fetch probe", async () => {
-    let permissionState = "prompt";
-    let probeOptions;
+  test("Local Network Access leaves the prompt to the WebSocket request", async () => {
+    let fetched = false;
     const result = await prepareLocalNetworkAccess({
       pageUrl: "https://staskaaa-netizen.github.io/FEather/",
       websocketUrl: "ws://192.168.8.187:8000/",
       permissions: {
         async query() {
-          return { state: permissionState };
+          return { state: "prompt" };
         }
       },
-      fetchImpl: async (url, options) => {
-        includes(url, "http://192.168.8.187/");
-        probeOptions = options;
-        permissionState = "granted";
+      fetchImpl: async () => {
+        fetched = true;
         return { type: "opaque", status: 0 };
       }
     });
-    equal(result.state, "granted");
-    equal(probeOptions.targetAddressSpace, "local");
-    equal(probeOptions.credentials, "omit");
+    equal(result.state, "prompt");
+    equal(result.privateTarget, true);
+    equal(fetched, false);
+  });
+
+  test("Loopback targets use the loopback-network permission", () => {
+    equal(permissionNamesForHostname("localhost")[0], "loopback-network");
+    equal(permissionNamesForHostname("127.0.0.1")[0], "loopback-network");
+    equal(permissionNamesForHostname("192.168.8.187")[0], "local-network");
   });
 
   test("Denied Local Network Access produces a useful error", async () => {
@@ -55,7 +59,7 @@
       }),
       "LOCAL_NETWORK_DENIED"
     );
-    includes(error.message, "browser settings");
+    includes(error.message, "site settings");
   });
 
   test("Local file usage does not request network permission", async () => {

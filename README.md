@@ -84,7 +84,9 @@ Then open `http://localhost:8080/`. This server only serves static files; it is 
 
 The GitHub Pages application connects directly to the configured private-IP `ws://...` endpoint. It never substitutes `wss://`.
 
-Chromium versions implementing Local Network Access may prompt for permission when FEather first connects. FEather checks `local-network` / `local-network-access`, performs one local probe to trigger the permission flow where supported, and then opens the WebSocket. The WebSocket constructor itself does not accept `targetAddressSpace`; that option is used only on the initial `fetch()` probe.
+Chromium versions implementing Local Network Access prompt for permission when the WebSocket first contacts a private address. FEather checks `local-network` (or `loopback-network` for loopback targets) and lets the actual WebSocket request trigger the permission prompt. It does not probe an unrelated HTTP port, and the WebSocket constructor does not receive `targetAddressSpace`.
+
+If local-network permission is still pending on page open, auto-connect waits and asks you to press **Connect**. This gives the browser a direct user action for the permission prompt. Once access is granted, normal auto-connect behavior resumes on later visits.
 
 Firefox may block an HTTPS GitHub Pages document from opening an unencrypted WebSocket to a local address. If that happens, use the offline/local FEather application. Browser restrictions must not be bypassed.
 
@@ -101,7 +103,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/FEather/tests/test-runner.html'
 ```
 
-The expected result is `40 passed, 0 failed`.
+The expected result is `41 passed, 0 failed`.
 
 ## Documentation
 

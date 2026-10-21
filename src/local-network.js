@@ -24,11 +24,23 @@
     return Boolean(private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31);
   }
 
-  async function queryLocalNetworkPermission(permissions) {
+  function isLoopbackHostname(hostname) {
+    const host = normalizedHostname(hostname);
+    return host === "localhost" || host === "::1" || /^127\./.test(host);
+  }
+
+  function permissionNamesForHostname(hostname) {
+    if (isLoopbackHostname(hostname)) {
+      return ["loopback-network", "local-network", "local-network-access"];
+    }
+    return ["local-network", "local-network-access"];
+  }
+
+  async function queryLocalNetworkPermission(permissions, hostname) {
     if (!permissions || typeof permissions.query !== "function") {
       return { supported: false, state: "unknown", name: "" };
     }
-    for (const name of ["local-network", "local-network-access"]) {
+    for (const name of permissionNamesForHostname(hostname)) {
       try {
         const status = await permissions.query({ name });
         return { supported: true, state: status.state, name };
@@ -43,60 +55,35 @@
     const settings = options || {};
     const pageUrl = new URL(settings.pageUrl || global.location.href);
     const websocketUrl = new URL(settings.websocketUrl);
-    if (pageUrl.protocol !== "https:") {
+    const privateTarget = isPrivateHostname(websocketUrl.hostname);
+    if (pageUrl.protocol !== "https:" || !privateTarget) {
       return { required: false, supported: false, state: "not-required" };
     }
 
-    const permission = await queryLocalNetworkPermission(settings.permissions || global.navigator.permissions);
-    if (permission.state === "denied") {
+    const permission = await queryLocalNetworkPermission(
+      settings.permissions || global.navigator.permissions,
+      websocketUrl.hostname
+    );
+    if (permission.supported && permission.state === "denied") {
       throw localNetworkError(
-        "Local-network permission is denied. Allow local-network access for this GitHub Pages site in the browser settings and retry."
+        "Local-network permission is blocked for this site. Open the browser's site settings, allow local-network access for FEather, reload the page, and press Connect."
       );
     }
 
-    let probeError = null;
-    if (permission.state === "prompt") {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), settings.probeTimeoutMs || 3000);
-      try {
-        const probeUrl = new URL("http://localhost/");
-        probeUrl.hostname = websocketUrl.hostname;
-        probeUrl.pathname = "/";
-        // Private IP literals are mixed-content exempt after permission is granted.
-        // WebSocket itself cannot carry the Fetch targetAddressSpace option.
-        await (settings.fetchImpl || global.fetch)(probeUrl.toString(), {
-          mode: "no-cors",
-          cache: "no-store",
-          credentials: "omit",
-          targetAddressSpace: "local",
-          signal: controller.signal
-        });
-      } catch (error) {
-        probeError = error;
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    const after = await queryLocalNetworkPermission(settings.permissions || global.navigator.permissions);
-    if (after.state === "denied") {
-      throw localNetworkError(
-        "Local-network permission was denied. Allow FEather to access devices on the local network, then press Connect."
-      );
-    }
     return {
       required: true,
       supported: permission.supported,
-      state: after.state,
+      state: permission.state,
       permissionName: permission.name,
-      privateTarget: isPrivateHostname(websocketUrl.hostname),
-      probeError: probeError ? probeError.message : ""
+      privateTarget
     };
   }
 
   global.TNCWeb = global.TNCWeb || {};
   Object.assign(global.TNCWeb, {
     isPrivateHostname,
+    isLoopbackHostname,
+    permissionNamesForHostname,
     prepareLocalNetworkAccess,
     queryLocalNetworkPermission
   });

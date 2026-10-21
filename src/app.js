@@ -17,6 +17,7 @@
     numberProgramLines,
     parseHex,
     prepareLocalNetworkAccess,
+    queryLocalNetworkPermission,
     toAnnotatedAscii,
     toAscii,
     toFe1DirectoryName,
@@ -954,11 +955,14 @@
     });
   }
 
-  async function connect() {
+  async function connect(options) {
     if (session.connecting || (session.transport && session.transport.state !== "closed")) {
       return;
     }
 
+    const userInitiated = Boolean(options && options.userInitiated);
+    let localAccess = null;
+    let websocketUrl = "";
     clearError();
     session.connecting = true;
     elements.connect.disabled = true;
@@ -972,21 +976,33 @@
     updateCounters();
 
     try {
-      if (!await acquireControllerLock()) {
-        throw new Error("Another browser tab currently owns the FEather serial controller.");
-      }
-
       const url = endpointValue();
+      websocketUrl = url;
       const timeout = Math.max(1000, Math.min(30000, Number(elements.timeout.value) || 5000));
       elements.protocolState.textContent = "CHECKING LOCAL NETWORK";
-      const localAccess = await prepareLocalNetworkAccess({
+      localAccess = await prepareLocalNetworkAccess({
         pageUrl: window.location.href,
         websocketUrl: url
       });
       diagnostics.add("SYSTEM", null, {
-        label: `Local-network access: ${localAccess.state}`,
-        error: localAccess.probeError || ""
+        label: `Local-network access: ${localAccess.state}`
       });
+      if (localAccess.required && localAccess.supported &&
+          localAccess.state === "prompt" && !userInitiated) {
+        elements.connect.disabled = false;
+        elements.disconnect.disabled = true;
+        setLinkState("inactive", "Local-network permission required");
+        elements.protocolState.textContent = "PRESS CONNECT TO ALLOW LOCAL NETWORK";
+        showError(
+          "Chromium needs your permission to reach the W610. Press Connect, then choose Allow when the local-network prompt appears."
+        );
+        return;
+      }
+
+      if (!await acquireControllerLock()) {
+        throw new Error("Another browser tab currently owns the FEather serial controller.");
+      }
+
       const transport = new WebSocketSerialTransport({
         url,
         connectTimeoutMs: timeout
@@ -1001,14 +1017,29 @@
       releaseControllerLock();
       setLinkState("error", "W610 connection failed");
       diagnostics.add("SYSTEM", null, { label: "Connect failed", error: error.message });
-      const secureToLocal = window.location.protocol === "https:" &&
-        elements.host.value.trim() &&
-        elements.port.value;
+      let latestPermission = null;
+      if (localAccess && localAccess.required && websocketUrl) {
+        try {
+          latestPermission = await queryLocalNetworkPermission(
+            navigator.permissions,
+            new URL(websocketUrl).hostname
+          );
+        } catch (permissionError) {
+          diagnostics.add("SYSTEM", null, {
+            label: "Local-network permission recheck failed",
+            error: permissionError.message
+          });
+        }
+      }
       if (error.code === "LOCAL_NETWORK_DENIED") {
         showError(error.message);
-      } else if (secureToLocal) {
+      } else if (latestPermission && latestPermission.state === "denied") {
         showError(
-          `Could not connect to the local W610: ${error.message} Allow local-network access when Chromium asks. Firefox may block HTTPS pages from opening ws:// connections; use the local FEather build in that case.`
+          "Local-network access is blocked for this site. Open the browser's site settings, allow local-network access for FEather, reload the page, and press Connect."
+        );
+      } else if (localAccess && localAccess.required) {
+        showError(
+          `Could not open the local W610 WebSocket: ${error.message} Press Connect and allow local-network access when Chromium asks. If this browser blocks HTTPS pages from opening ws:// connections, use the local FEather build.`
         );
       } else {
         showError("Could not open the W610 WebSocket.", error);
@@ -1057,7 +1088,7 @@
   elements.form.addEventListener("submit", (event) => {
     event.preventDefault();
     saveSettings();
-    connect();
+    connect({ userInitiated: true });
   });
   elements.disconnect.addEventListener("click", disconnect);
   elements.sendHex.addEventListener("click", sendManualHex);
@@ -1254,7 +1285,7 @@
   if (elements.autoConnectToggle.checked && elements.host.value.trim()) {
     setTimeout(() => {
       if (!session.transport) {
-        connect();
+        connect({ userInitiated: false });
       }
     }, 250);
   }

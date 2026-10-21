@@ -40,6 +40,8 @@ Implemented behavior includes:
 - Persistent non-file settings in `localStorage`.
 - A top connection bar with an auto-connect option that makes one attempt and does not poll.
 - A left browser-file list, selected-file preview, and compact floating transfer monitor.
+- Quick text editing with preserved or regenerated line numbers and line-range movement.
+- A basic, warning-driven G-code to Heidenhain L-code converter.
 - Browser tests with a simulated transport and scripted mock TNC.
 
 Export-all/restore, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
@@ -81,7 +83,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/webremo/tests/test-runner.html'
 ```
 
-The expected result is `33 passed, 0 failed`.
+The expected result is `37 passed, 0 failed`.
 
 ## Documentation
 

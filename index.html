@@ -237,6 +237,8 @@
       margin-bottom: 10px;
     }
     .preview-toolbar select { width: 92px; }
+    .preview-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .preview-actions button { padding: 6px 8px; font-size: 11px; }
     .preview-name {
       font-family: var(--mono);
       font-size: 13px;
@@ -262,6 +264,22 @@
       font: 12px/1.55 var(--mono);
       white-space: pre;
       tab-size: 4;
+    }
+    .file-editor {
+      flex: 1;
+      min-height: 320px;
+      max-height: calc(100vh - 330px);
+      overflow: auto;
+      margin: 0;
+      padding: 12px;
+      border: 1px solid #293137;
+      border-radius: 4px;
+      background: #090c0e;
+      color: #d8e4e8;
+      font: 12px/1.55 var(--mono);
+      white-space: pre;
+      tab-size: 4;
+      resize: vertical;
     }
     .monitor-bar {
       position: fixed;
@@ -471,10 +489,6 @@
       <section class="panel preview-panel" aria-labelledby="previewHeading">
         <div class="panel-head">
           <h2 id="previewHeading">Program preview</h2>
-          <select id="previewMode" aria-label="Preview format">
-            <option value="text">Text</option>
-            <option value="hex">HEX</option>
-          </select>
         </div>
         <div class="panel-body">
           <div class="preview-toolbar">
@@ -482,8 +496,25 @@
               <div id="filePreviewName" class="preview-name">Select a file</div>
               <div id="filePreviewMeta" class="preview-meta">Choose a program from the list.</div>
             </div>
+            <div class="preview-actions">
+              <select id="numberingMode" aria-label="Line numbering when saving" hidden>
+                <option value="preserve">Preserve numbers</option>
+                <option value="auto">Auto-number</option>
+              </select>
+              <select id="previewMode" aria-label="Preview format">
+                <option value="text">Text</option>
+                <option value="hex">HEX</option>
+              </select>
+              <button id="editFileButton" type="button">Edit</button>
+              <button id="moveUpButton" type="button" hidden>Move up</button>
+              <button id="moveDownButton" type="button" hidden>Move down</button>
+              <button id="saveFileButton" class="primary" type="button" hidden>Save</button>
+              <button id="cancelEditButton" type="button" hidden>Cancel</button>
+              <button id="convertGCodeButton" type="button">Convert G-code</button>
+            </div>
           </div>
           <pre id="filePreview" class="file-preview">No file selected.</pre>
+          <textarea id="fileEditor" class="file-editor" spellcheck="false" hidden></textarea>
         </div>
       </section>
     </div>
@@ -575,6 +606,32 @@
     </div>
   </dialog>
 
+  <dialog id="gcodeDialog" class="settings-dialog">
+    <form id="gcodeForm">
+      <div class="dialog-head">
+        <h2>Convert G-code to L</h2>
+        <button id="gcodeCloseButton" type="button">Close</button>
+      </div>
+      <div class="dialog-body">
+        <label for="gcodeInput">Paste G-code</label>
+        <textarea id="gcodeInput" class="file-editor" spellcheck="false" placeholder="G21 G90&#10;G0 X0 Y0 Z5&#10;G1 X20 Y10 F250&#10;M30"></textarea>
+        <div style="margin-top:10px">
+          <label for="gcodeProgramName">L program name</label>
+          <input id="gcodeProgramName" maxlength="15" value="GCONV" autocomplete="off" spellcheck="false">
+        </div>
+        <p class="hint">
+          Supports basic G0/G1 motion, G2/G3 XY arcs with I/J, G90/G91, common M commands, and comments.
+          Unsupported words are reported and retained as comments rather than silently mistranslated.
+        </p>
+        <p id="gcodeStatus" class="hint" aria-live="polite"></p>
+      </div>
+      <div class="dialog-actions">
+        <button id="gcodeCancelButton" type="button">Cancel</button>
+        <button class="primary" type="submit">Convert</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="settingsDialog" class="settings-dialog">
     <form id="settingsForm">
       <div class="dialog-head">
@@ -638,6 +695,7 @@
   <script src="src/nc-data.js"></script>
   <script src="src/storage.js"></script>
   <script src="src/fe1.js"></script>
+  <script src="src/gcode.js"></script>
   <script src="src/app.js"></script>
 </body>
 </html>

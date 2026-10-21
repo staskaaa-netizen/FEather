@@ -12,12 +12,15 @@
     WebSocketSerialTransport,
     buildDirectoryResponse,
     buildWebSocketEndpoint,
+    convertGcodeToL,
     fromFe1DirectoryName,
+    numberProgramLines,
     parseHex,
     toAnnotatedAscii,
     toAscii,
     toFe1DirectoryName,
-    toHex
+    toHex,
+    validateLProgram
   } = window.TNCWeb;
 
   const ncCatalog = Array.isArray(window.TNCWeb.NC_FILES) ? window.TNCWeb.NC_FILES : [];
@@ -75,7 +78,22 @@
     filePreviewName: byId("filePreviewName"),
     filePreviewMeta: byId("filePreviewMeta"),
     filePreview: byId("filePreview"),
+    fileEditor: byId("fileEditor"),
     previewMode: byId("previewMode"),
+    numberingMode: byId("numberingMode"),
+    editFile: byId("editFileButton"),
+    saveFile: byId("saveFileButton"),
+    cancelEdit: byId("cancelEditButton"),
+    moveUp: byId("moveUpButton"),
+    moveDown: byId("moveDownButton"),
+    convertGCode: byId("convertGCodeButton"),
+    gcodeDialog: byId("gcodeDialog"),
+    gcodeForm: byId("gcodeForm"),
+    gcodeInput: byId("gcodeInput"),
+    gcodeProgramName: byId("gcodeProgramName"),
+    gcodeStatus: byId("gcodeStatus"),
+    gcodeClose: byId("gcodeCloseButton"),
+    gcodeCancel: byId("gcodeCancelButton"),
     fileDropZone: byId("fileDropZone"),
     browseFiles: byId("browseFilesButton"),
     fileInput: byId("fileInput"),
@@ -97,6 +115,7 @@
   const receiveBuffer = new ByteStreamBuffer({ maxBytes: 4 * 1024 * 1024 });
   let storedRecords = [];
   let selectedFileName = null;
+  let editContext = null;
   const session = {
     transport: null,
     controllerHeld: false,
@@ -394,6 +413,9 @@
   }
 
   function renderFilePreview(record) {
+    if (editContext) {
+      return;
+    }
     if (!record) {
       elements.filePreviewName.textContent = "Select a file";
       elements.filePreviewMeta.textContent = "Choose a program from the list.";
@@ -420,7 +442,127 @@
     }
   }
 
+  function setEditingMode(active) {
+    elements.fileEditor.hidden = !active;
+    elements.filePreview.hidden = active;
+    elements.editFile.hidden = active;
+    elements.convertGCode.hidden = active;
+    elements.saveFile.hidden = !active;
+    elements.cancelEdit.hidden = !active;
+    elements.moveUp.hidden = !active;
+    elements.moveDown.hidden = !active;
+    elements.numberingMode.hidden = !active;
+    elements.previewMode.disabled = active;
+  }
+
+  function startEditing(text, context) {
+    editContext = Object.assign({
+      recordName: null,
+      saveName: "PROGRAM.H",
+      source: "import",
+      warnings: []
+    }, context || {});
+    elements.fileEditor.value = String(text).replace(/\r\n?/g, "\n");
+    elements.filePreviewName.textContent = `${editContext.saveName} [editing]`;
+    elements.filePreviewMeta.textContent = editContext.warnings.length
+      ? `Converted with ${editContext.warnings.length} warning${editContext.warnings.length === 1 ? "" : "s"}. Review marked source lines.`
+      : "Edit blocks, move selected lines, then save.";
+    setEditingMode(true);
+    elements.fileEditor.focus();
+  }
+
+  function cancelEditing() {
+    editContext = null;
+    setEditingMode(false);
+    renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
+  }
+
+  async function saveEditing() {
+    if (!editContext) {
+      return;
+    }
+    if (session.transferActive) {
+      showError("Wait for the active FE transfer to finish before saving an edit.");
+      return;
+    }
+
+    let text = elements.fileEditor.value.replace(/\r\n?/g, "\n");
+    if (elements.numberingMode.value === "auto") {
+      text = numberProgramLines(text, 0);
+    } else {
+      text = text.replace(/\n/g, "\r\n");
+    }
+    if (!text.endsWith("\r\n")) {
+      text += "\r\n";
+    }
+    if (!/^[\x00-\x7f]*$/.test(text)) {
+      showError("Edited programs must contain ASCII characters only.");
+      return;
+    }
+    const validation = validateLProgram(text);
+    if (!validation.valid) {
+      showError(validation.error);
+      return;
+    }
+
+    if (editContext.recordName && !window.confirm(`Overwrite ${editContext.recordName}?`)) {
+      return;
+    }
+    try {
+      const bytes = new TextEncoder().encode(text);
+      let saved;
+      if (editContext.recordName) {
+        saved = await storage.save(editContext.recordName, bytes, { source: editContext.source });
+      } else {
+        const reserved = storedRecords.map((record) => record.name);
+        saved = await storage.saveImported(editContext.saveName, bytes, reserved);
+      }
+      selectedFileName = saved.name;
+      editContext = null;
+      setEditingMode(false);
+      await refreshStoredFiles();
+      elements.importStatus.textContent = `Saved ${saved.name}.`;
+      clearError();
+    } catch (error) {
+      showError("Could not save the edited program.", error);
+    }
+  }
+
+  function moveSelectedLines(direction) {
+    if (!editContext) {
+      return;
+    }
+    const text = elements.fileEditor.value;
+    const startLine = text.slice(0, elements.fileEditor.selectionStart).split("\n").length - 1;
+    let endLine = elements.fileEditor.selectionEnd === elements.fileEditor.selectionStart
+      ? startLine
+      : text.slice(0, elements.fileEditor.selectionEnd).split("\n").length - 1;
+    if (endLine < startLine) {
+      endLine = startLine;
+    }
+    if (direction < 0 && startLine === 0) {
+      return;
+    }
+
+    const lines = text.split("\n");
+    if (direction > 0 && endLine >= lines.length - 1) {
+      return;
+    }
+    const selected = lines.splice(startLine, endLine - startLine + 1);
+    const target = direction < 0 ? startLine - 1 : startLine + 1;
+    lines.splice(target, 0, ...selected);
+    elements.fileEditor.value = lines.join("\n");
+    const newStart = lines.slice(0, target).join("\n").length + (target > 0 ? 1 : 0);
+    const movedText = selected.join("\n");
+    elements.fileEditor.setSelectionRange(newStart, newStart + movedText.length);
+    elements.fileEditor.focus();
+  }
+
   function selectStoredFile(name) {
+    if (editContext) {
+      showError("Save or cancel the current edit before selecting another file.");
+      return;
+    }
     selectedFileName = name;
     for (const row of elements.storedFileList.querySelectorAll(".file-row")) {
       row.classList.toggle("selected", row.dataset.name === name);
@@ -570,6 +712,34 @@
     if (errors.length > 0) {
       showError(`Some files were rejected: ${errors.join(" | ")}`);
     }
+  }
+
+  function editSelectedFile() {
+    const record = storedRecords.find((item) => item.name === selectedFileName);
+    if (!record) {
+      showError("Select a browser file before editing.");
+      return;
+    }
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(record.bytes));
+      startEditing(text, {
+        recordName: record.name,
+        saveName: record.name,
+        source: record.source
+      });
+    } catch (error) {
+      showError("This file is not editable text.", error);
+    }
+  }
+
+  function openGCodeDialog() {
+    const selected = storedRecords.find((item) => item.name === selectedFileName);
+    const base = selected ? selected.name.replace(/\.[^.]+$/, "") : "GCONV";
+    elements.gcodeProgramName.value = base.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 15) || "GCONV";
+    elements.gcodeInput.value = "";
+    elements.gcodeStatus.textContent = "";
+    elements.gcodeDialog.showModal();
+    elements.gcodeInput.focus();
   }
 
   function setLinkState(state, text) {
@@ -881,6 +1051,34 @@
   elements.logView.addEventListener("change", renderLog);
   elements.previewMode.addEventListener("change", () => {
     renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
+  });
+  elements.editFile.addEventListener("click", editSelectedFile);
+  elements.saveFile.addEventListener("click", saveEditing);
+  elements.cancelEdit.addEventListener("click", cancelEditing);
+  elements.moveUp.addEventListener("click", () => moveSelectedLines(-1));
+  elements.moveDown.addEventListener("click", () => moveSelectedLines(1));
+  elements.convertGCode.addEventListener("click", openGCodeDialog);
+  elements.gcodeClose.addEventListener("click", () => elements.gcodeDialog.close());
+  elements.gcodeCancel.addEventListener("click", () => elements.gcodeDialog.close());
+  elements.gcodeForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    try {
+      const result = convertGcodeToL(elements.gcodeInput.value, {
+        programName: elements.gcodeProgramName.value
+      });
+      elements.gcodeDialog.close();
+      startEditing(result.text, {
+        recordName: null,
+        saveName: `${result.programName}.H`,
+        source: "import",
+        warnings: result.warnings
+      });
+      elements.importStatus.textContent = result.warnings.length
+        ? `G-code converted with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}.`
+        : "G-code converted. Review and save the generated L program.";
+    } catch (error) {
+      elements.gcodeStatus.textContent = error.message;
+    }
   });
   elements.settingsButton.addEventListener("click", () => {
     updateEndpoint();

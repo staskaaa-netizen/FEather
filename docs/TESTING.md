@@ -4,7 +4,7 @@ Document status: 20 October 2026. Transport and FE1 directory tested on the targ
 
 ## Automated browser tests
 
-Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 33 tests:
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 37 tests:
 
 - Hex parsing, control-character naming, and diagnostic export.
 - Configurable endpoint validation.
@@ -29,6 +29,7 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - IndexedDB persistence, binary-exact retrieval, and duplicate-name handling.
 - Fragmented TNC delete-command parsing and idempotent bundled-file seeding.
 - Multi-format filename-to-FE1 type mapping and imported-file storage.
+- G-code linear/arc conversion, unsupported-instruction reporting, structural validation, and auto-numbering.
 
 The WebSocket tests use an injected `FakeWebSocket`. The mock TNC responses use synthetic byte sequences. They validate the browser transport and buffering code; they are **not** documented FE1 examples and do not prove TNC compatibility.
 

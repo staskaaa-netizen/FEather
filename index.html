@@ -450,7 +450,7 @@
         <span>Heidenhain FE1 file server</span>
       </div>
       <div class="connection-bar">
-        <code id="endpointSummary" class="endpoint-top">ws://192.168.8.187:8000/</code>
+        <code id="endpointSummary" class="endpoint-top">Configure W610 in Settings</code>
         <div class="status-strip" aria-live="polite">
           <span id="linkChip" class="chip" data-state="inactive">W610 link offline</span>
           <span id="serverIndicator" class="chip server-lamp" data-state="inactive">TNC FE1 server offline</span>
@@ -636,7 +636,7 @@
         <div class="field-grid">
           <div class="wide">
             <label for="hostInput">W610 IP or hostname</label>
-            <input id="hostInput" name="host" value="192.168.8.187" autocomplete="off" spellcheck="false">
+            <input id="hostInput" name="host" value="" placeholder="W610 LAN IP address" autocomplete="off" spellcheck="false">
           </div>
           <div>
             <label for="portInput">WebSocket port</label>
@@ -676,6 +676,11 @@
           Connection settings and display options are stored in this browser.
           Program files remain in IndexedDB.
         </p>
+        <p class="hint">
+          GitHub Pages uses HTTPS. Chromium may ask for local-network permission before connecting to
+          <code>ws://</code>. Firefox may block secure HTTPS to local unencrypted WebSockets; the local FEather
+          build remains the fallback.
+        </p>
       </div>
       <div class="dialog-actions">
         <button id="settingsCancelButton" type="button">Cancel</button>
@@ -686,7 +691,7 @@
 
   <script src="src/diagnostics.js"></script>
   <script src="src/transport.js"></script>
-  <script src="src/nc-data.js"></script>
+  <script src="src/local-network.js"></script>
   <script src="src/storage.js"></script>
   <script src="src/fe1.js"></script>
   <script src="src/gcode.js"></script>

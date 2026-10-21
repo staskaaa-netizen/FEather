@@ -5,3 +5,9 @@ Thumbs.db
 # Local test output
 tmp/
 test-results/
+
+# Local NC fixtures are intentionally not published
+/nc/
+
+# Local NC fixtures stay outside the public repository
+/nc/

@@ -16,6 +16,7 @@
     fromFe1DirectoryName,
     numberProgramLines,
     parseHex,
+    prepareLocalNetworkAccess,
     toAnnotatedAscii,
     toAscii,
     toFe1DirectoryName,
@@ -23,22 +24,8 @@
     validateLProgram
   } = window.TNCWeb;
 
-  const ncCatalog = Array.isArray(window.TNCWeb.NC_FILES) ? window.TNCWeb.NC_FILES : [];
-  let directoryFiles = ncCatalog.map((file) => ({ name: file.name, size: file.size }));
-
-  function decodeBase64(value) {
-    const binary = atob(value);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    return bytes;
-  }
-
-  const programBytes = new Map(ncCatalog.map((file) => [
-    toFe1DirectoryName(file.name),
-    decodeBase64(file.base64)
-  ]));
+  let directoryFiles = [];
+  const programBytes = new Map();
 
   const byId = (id) => document.getElementById(id);
   const elements = {
@@ -704,14 +691,6 @@
 
   async function initializeStoredFiles() {
     await refreshStoredFiles();
-    await storage.initialize(ncCatalog.map((file) => ({
-      name: file.name,
-      bytes: decodeBase64(file.base64)
-    })), "sample-nc-v1");
-    if (imported.length > 0) {
-      selectedFileName = imported[imported.length - 1];
-    }
-    await refreshStoredFiles();
   }
 
   async function importFiles(fileList) {
@@ -751,6 +730,9 @@
       }
     }
 
+    if (imported.length > 0) {
+      selectedFileName = imported[imported.length - 1];
+    }
     await refreshStoredFiles();
     elements.importStatus.textContent = `${imported.length} imported${errors.length ? `, ${errors.length} rejected` : ""}.`;
     if (errors.length > 0) {
@@ -996,6 +978,15 @@
 
       const url = endpointValue();
       const timeout = Math.max(1000, Math.min(30000, Number(elements.timeout.value) || 5000));
+      elements.protocolState.textContent = "CHECKING LOCAL NETWORK";
+      const localAccess = await prepareLocalNetworkAccess({
+        pageUrl: window.location.href,
+        websocketUrl: url
+      });
+      diagnostics.add("SYSTEM", null, {
+        label: `Local-network access: ${localAccess.state}`,
+        error: localAccess.probeError || ""
+      });
       const transport = new WebSocketSerialTransport({
         url,
         connectTimeoutMs: timeout
@@ -1010,7 +1001,18 @@
       releaseControllerLock();
       setLinkState("error", "W610 connection failed");
       diagnostics.add("SYSTEM", null, { label: "Connect failed", error: error.message });
-      showError("Could not open the W610 WebSocket.", error);
+      const secureToLocal = window.location.protocol === "https:" &&
+        elements.host.value.trim() &&
+        elements.port.value;
+      if (error.code === "LOCAL_NETWORK_DENIED") {
+        showError(error.message);
+      } else if (secureToLocal) {
+        showError(
+          `Could not connect to the local W610: ${error.message} Allow local-network access when Chromium asks. Firefox may block HTTPS pages from opening ws:// connections; use the local FEather build in that case.`
+        );
+      } else {
+        showError("Could not open the W610 WebSocket.", error);
+      }
       updateCounters();
     } finally {
       session.connecting = false;
@@ -1249,7 +1251,7 @@
     label: "FE1 directory, retrieval, receive, and delete services are ready"
   });
 
-  if (elements.autoConnectToggle.checked) {
+  if (elements.autoConnectToggle.checked && elements.host.value.trim()) {
     setTimeout(() => {
       if (!session.transport) {
         connect();

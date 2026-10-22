@@ -11,3 +11,6 @@ test-results/
 
 # Local NC fixtures stay outside the public repository
 /nc/
+
+# Locally retained W610 firmware analysis
+/w610-firmware/

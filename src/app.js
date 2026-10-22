@@ -79,7 +79,6 @@
     filePreviewMeta: byId("filePreviewMeta"),
     filePreview: byId("filePreview"),
     fileEditor: byId("fileEditor"),
-    previewMode: byId("previewMode"),
     saveFile: byId("saveFileButton"),
     moveUp: byId("moveUpButton"),
     moveDown: byId("moveDownButton"),
@@ -517,18 +516,6 @@
     const bytes = new Uint8Array(record.bytes);
     elements.filePreviewName.textContent = record.name;
     elements.filePreviewMeta.textContent = `${formatBytes(bytes.byteLength)} · ${new Date(record.updatedAt).toLocaleString()}`;
-    if (elements.previewMode.value === "hex") {
-      editContext = null;
-      setEditingMode(false);
-      const lines = [];
-      for (let offset = 0; offset < bytes.byteLength; offset += 16) {
-        const chunk = bytes.subarray(offset, offset + 16);
-        const hex = toHex(chunk).padEnd(47, " ");
-        lines.push(`${offset.toString(16).padStart(8, "0")}  ${hex}  ${toAscii(chunk)}`);
-      }
-      elements.filePreview.textContent = lines.join("\n") || "(empty file)";
-      return;
-    }
     try {
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       startEditing(text, {
@@ -542,7 +529,7 @@
       editContext = null;
       setEditingMode(false);
       elements.filePreview.hidden = false;
-      elements.filePreview.textContent = "This file is not valid text. Switch the preview to HEX.";
+      elements.filePreview.textContent = "This file is not valid text and cannot be opened in the text editor.";
     }
   }
 
@@ -1494,14 +1481,6 @@
     download(`feather-trace-${stamp}.json`, diagnostics.export("json"), "application/json");
   });
   elements.logView.addEventListener("change", renderLog);
-  elements.previewMode.addEventListener("change", () => {
-    if (editContext?.dirty && !window.confirm("Discard unsaved changes and switch preview mode?")) {
-      elements.previewMode.value = "text";
-      return;
-    }
-    editContext = null;
-    renderFilePreview(storedRecords.find((record) => record.name === selectedFileName) || null);
-  });
   elements.saveFile.addEventListener("click", saveEditing);
   elements.moveUp.addEventListener("click", () => moveSelectedLines(-1));
   elements.moveDown.addEventListener("click", () => moveSelectedLines(1));

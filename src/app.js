@@ -13,9 +13,12 @@
     buildDirectoryResponse,
     buildWebSocketEndpoint,
     convertGcodeToL,
+    discoverW610,
     fromFe1DirectoryName,
+    ipv4PrefixFromHost,
     numberProgramLines,
     parseHex,
+    parseIpv4SubnetPrefix,
     prepareLocalNetworkAccess,
     queryLocalNetworkPermission,
     toAnnotatedAscii,
@@ -46,6 +49,9 @@
     settingsButton: byId("settingsButton"),
     settingsClose: byId("settingsCloseButton"),
     settingsCancel: byId("settingsCancelButton"),
+    discoverySubnet: byId("discoverySubnetInput"),
+    discoveryButton: byId("discoveryButton"),
+    discoveryStatus: byId("discoveryStatus"),
     autoConnectToggle: byId("autoConnectToggle"),
     about: byId("aboutDialog"),
     aboutButton: byId("aboutButton"),
@@ -342,6 +348,85 @@
     } catch (error) {
       showError("Could not save settings in this browser.", error);
       return false;
+    }
+  }
+
+  async function findW610() {
+    let subnet;
+    try {
+      subnet = parseIpv4SubnetPrefix(
+        elements.discoverySubnet.value || ipv4PrefixFromHost(elements.host.value.trim())
+      );
+    } catch (error) {
+      elements.discoveryStatus.textContent = error.message;
+      elements.discoverySubnet.focus();
+      return;
+    }
+
+    const port = Number(elements.port.value);
+    const path = elements.path.value.trim() || "/";
+    elements.discoverySubnet.value = subnet;
+    elements.discoveryButton.disabled = true;
+    elements.discoveryStatus.textContent =
+      `Scanning ${subnet}.1-${subnet}.254 for HTTP devices. Allow local-network access if prompted.`;
+
+    try {
+      const permission = await queryLocalNetworkPermission(
+        navigator.permissions,
+        `${subnet}.1`
+      );
+      if (permission.state === "denied") {
+        throw new Error(
+          "Local-network permission is blocked for this site. Allow it in browser site settings, reload, and try again."
+        );
+      }
+
+      const result = await discoverW610({
+        subnet,
+        preferredHost: elements.host.value.trim(),
+        port,
+        path,
+        onHttpProgress(completed, total) {
+          elements.discoveryStatus.textContent =
+            `Scanning local hosts: ${completed}/${total} checked...`;
+        },
+        onWebSocketProgress(completed, total) {
+          elements.discoveryStatus.textContent =
+            `Checking W610 port ${port}: ${completed}/${total} HTTP devices checked...`;
+        }
+      });
+
+      const permissionAfter = await queryLocalNetworkPermission(
+        navigator.permissions,
+        `${subnet}.1`
+      );
+      if (permissionAfter.state === "denied") {
+        throw new Error(
+          "Local-network permission was denied. Allow it in browser site settings and try again."
+        );
+      }
+
+      if (result.devices.length > 0) {
+        const found = result.devices.map((device) => device.host);
+        elements.host.value = found[0];
+        updateEndpoint();
+        elements.discoveryStatus.textContent = found.length === 1
+          ? `Found W610 WebSocket at ${found[0]}. Review the endpoint and save settings.`
+          : `Found W610-compatible WebSockets at ${found.join(", ")}. The first address was selected.`;
+        diagnostics.add("SYSTEM", null, {
+          label: `W610 discovery found ${found.join(", ")}`
+        });
+      } else if (result.httpHosts.length > 0) {
+        elements.discoveryStatus.textContent =
+          `Found HTTP devices at ${result.httpHosts.join(", ")}, but none accepted WebSocket port ${port}.`;
+      } else {
+        elements.discoveryStatus.textContent =
+          `No HTTP devices found in ${subnet}.1-${subnet}.254. Confirm this PC is on the W610 network and enter the correct first three octets.`;
+      }
+    } catch (error) {
+      elements.discoveryStatus.textContent = error.message;
+    } finally {
+      elements.discoveryButton.disabled = false;
     }
   }
 
@@ -1170,9 +1255,13 @@
     }
   });
   elements.settingsButton.addEventListener("click", () => {
+    if (!elements.discoverySubnet.value) {
+      elements.discoverySubnet.value = ipv4PrefixFromHost(elements.host.value.trim());
+    }
     updateEndpoint();
     elements.settings.showModal();
   });
+  elements.discoveryButton.addEventListener("click", findW610);
   elements.aboutButton.addEventListener("click", () => elements.about.showModal());
   elements.aboutClose.addEventListener("click", () => elements.about.close());
   elements.settingsClose.addEventListener("click", () => elements.settings.close());

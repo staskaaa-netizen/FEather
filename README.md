@@ -42,7 +42,7 @@ Implemented behavior includes:
 - Multi-file Browse and drag-and-drop import with byte-exact IndexedDB storage.
 - TNC-requested deletion with an updated external directory handshake.
 - A compact primary workspace with diagnostics hidden by default.
-- A Settings dialog for W610 endpoint, timeout, log view, and diagnostic visibility.
+- A Settings dialog for W610 endpoint, timeout, local-network discovery, log view, and diagnostic visibility.
 - Persistent non-file settings in `localStorage`.
 - A top connection bar with an auto-connect option that makes one attempt and does not poll.
 - A left browser-file list, selected-file preview, and compact floating transfer monitor.
@@ -108,6 +108,8 @@ Chromium versions implementing Local Network Access prompt for permission when t
 
 If local-network permission is still pending on page open, auto-connect waits and asks you to press **Connect**. This gives the browser a direct user action for the permission prompt. Once access is granted, normal auto-connect behavior resumes on later visits.
 
+The Settings dialog includes **Find W610**. Enter the first three IPv4 octets, such as `192.168.8`, and FEather scans `.1` through `.254` for HTTP responders, then checks those hosts on the configured WebSocket port. Browsers cannot read the PC's subnet directly, so the prefix must be entered or derived from the last configured IPv4 address. The scan does not send serial data. Browser local-network restrictions may still prevent discovery in unsupported browsers.
+
 Firefox may block an HTTPS GitHub Pages document from opening an unencrypted WebSocket to a local address. If that happens, use the offline/local FEather application. Browser restrictions must not be bypassed.
 
 No sample NC programs are included in the public repository. Use **Browse files** or drag and drop to add programs to the selected browser origin.
@@ -123,7 +125,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/FEather/tests/test-runner.html'
 ```
 
-The expected result is `41 passed, 0 failed`.
+The expected result is `45 passed, 0 failed`.
 
 ## Documentation
 

@@ -91,6 +91,13 @@
     gcodeStatus: byId("gcodeStatus"),
     gcodeClose: byId("gcodeCloseButton"),
     gcodeCancel: byId("gcodeCancelButton"),
+    moveLibraryDialog: byId("moveLibraryDialog"),
+    moveLibraryForm: byId("moveLibraryForm"),
+    moveLibraryFile: byId("moveLibraryFile"),
+    moveLibraryTarget: byId("moveLibraryTarget"),
+    moveLibraryStatus: byId("moveLibraryStatus"),
+    moveLibraryClose: byId("moveLibraryCloseButton"),
+    moveLibraryCancel: byId("moveLibraryCancelButton"),
     fileDropZone: byId("fileDropZone"),
     browseFiles: byId("browseFilesButton"),
     fileInput: byId("fileInput"),
@@ -114,6 +121,8 @@
   let libraries = [];
   let activeLibraryId = null;
   let selectedFileName = null;
+  let draggedFileName = null;
+  let moveLibraryFileName = null;
   let editContext = null;
   let renumberTimer = null;
   const session = {
@@ -712,6 +721,25 @@
       count.textContent = String(counts.get(library.id) || 0);
       tab.append(count);
       tab.addEventListener("click", () => switchLibrary(library.id));
+      tab.addEventListener("dragover", (event) => {
+        if (!draggedFileName || library.id === activeLibraryId) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        tab.classList.add("drop-target");
+      });
+      tab.addEventListener("dragleave", () => tab.classList.remove("drop-target"));
+      tab.addEventListener("drop", async (event) => {
+        if (!draggedFileName || library.id === activeLibraryId) {
+          return;
+        }
+        event.preventDefault();
+        tab.classList.remove("drop-target");
+        const name = draggedFileName;
+        draggedFileName = null;
+        await moveFileToLibrary(name, library.id);
+      });
       elements.libraryTabs.append(tab);
     }
     const active = libraries.find((library) => library.id === activeLibraryId);
@@ -720,6 +748,87 @@
       : "Select a library to control which files are shared with the TNC.";
     elements.deleteLibrary.disabled = activeLibraryId === DEFAULT_LIBRARY_ID;
     elements.renameLibrary.disabled = !active;
+  }
+
+  function clearLibraryDropTargets() {
+    for (const tab of elements.libraryTabs.querySelectorAll(".drop-target")) {
+      tab.classList.remove("drop-target");
+    }
+  }
+
+  async function moveFileToLibrary(name, targetLibraryId) {
+    if (targetLibraryId === activeLibraryId) {
+      return false;
+    }
+    if (session.transferActive) {
+      const message = "Wait for the active FE transfer to finish before moving a program.";
+      showError(message);
+      if (elements.moveLibraryDialog.open) {
+        elements.moveLibraryStatus.textContent = message;
+      }
+      return false;
+    }
+    const record = storedRecords.find((item) => item.name === name);
+    if (!record) {
+      showError(`File not found: ${name}`);
+      return false;
+    }
+    if (editContext?.dirty && selectedFileName === name &&
+        !window.confirm("Discard unsaved changes and move this program?")) {
+      return false;
+    }
+    const target = libraries.find((library) => library.id === targetLibraryId);
+    if (!target) {
+      showError("Destination library not found.");
+      return false;
+    }
+    try {
+      await storage.moveToLibrary(name, targetLibraryId);
+      if (selectedFileName === name) {
+        selectedFileName = null;
+        editContext = null;
+        setEditingMode(false);
+      }
+      await refreshStoredFiles();
+      elements.importStatus.textContent = `Moved ${name} to ${target.name}.`;
+      clearError();
+      diagnostics.add("SYSTEM", null, {
+        label: `Moved ${name} to library ${target.name}`
+      });
+      return true;
+    } catch (error) {
+      showError("Could not move the program.", error);
+      if (elements.moveLibraryDialog.open) {
+        elements.moveLibraryStatus.textContent = error.message;
+      }
+      return false;
+    }
+  }
+
+  function openMoveLibraryDialog(name) {
+    const record = storedRecords.find((item) => item.name === name);
+    if (!record) {
+      return;
+    }
+    const targets = libraries.filter((library) => library.id !== activeLibraryId);
+    if (targets.length === 0) {
+      showError("Create another library before moving a program.");
+      return;
+    }
+    moveLibraryFileName = name;
+    elements.moveLibraryFile.textContent = `Move ${name} out of "${libraries.find(
+      (library) => library.id === activeLibraryId
+    ).name}".`;
+    elements.moveLibraryTarget.replaceChildren();
+    for (const library of targets) {
+      const option = document.createElement("option");
+      option.value = library.id;
+      option.textContent = library.name;
+      elements.moveLibraryTarget.append(option);
+    }
+    elements.moveLibraryStatus.textContent = "";
+    elements.moveLibraryDialog.showModal();
+    elements.moveLibraryTarget.focus();
   }
 
   async function switchLibrary(id) {
@@ -854,6 +963,7 @@
       row.dataset.name = record.name;
       row.tabIndex = 0;
       row.setAttribute("role", "button");
+      row.draggable = libraries.length > 1;
       row.classList.toggle("selected", record.name === selectedFileName);
       const choose = () => selectStoredFile(record.name);
       row.addEventListener("click", choose);
@@ -862,6 +972,23 @@
           event.preventDefault();
           choose();
         }
+      });
+      row.addEventListener("dragstart", (event) => {
+        if (session.transferActive) {
+          event.preventDefault();
+          showError("Wait for the active FE transfer to finish before moving a program.");
+          return;
+        }
+        draggedFileName = record.name;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("application/x-feather-file", record.name);
+        event.dataTransfer.setData("text/plain", record.name);
+        row.classList.add("dragging");
+      });
+      row.addEventListener("dragend", () => {
+        draggedFileName = null;
+        row.classList.remove("dragging");
+        clearLibraryDropTargets();
       });
       const label = document.createElement("span");
       label.className = "file-name";
@@ -880,6 +1007,17 @@
         event.stopPropagation();
         download(record.name, new Uint8Array(record.bytes), "application/octet-stream");
       });
+      const moveButton = document.createElement("button");
+      moveButton.type = "button";
+      moveButton.textContent = "Move";
+      moveButton.disabled = libraries.length < 2;
+      moveButton.title = libraries.length < 2
+        ? "Create another library before moving this program."
+        : "Move this program to another library";
+      moveButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openMoveLibraryDialog(record.name);
+      });
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
       deleteButton.className = "danger";
@@ -896,7 +1034,7 @@
           showError("Could not delete the received file.", error);
         }
       });
-      actions.append(downloadButton, deleteButton);
+      actions.append(downloadButton, moveButton, deleteButton);
       row.append(label, actions);
       elements.storedFileList.append(row);
     }
@@ -1394,6 +1532,23 @@
   elements.convertGCode.addEventListener("click", openGCodeDialog);
   elements.gcodeClose.addEventListener("click", () => elements.gcodeDialog.close());
   elements.gcodeCancel.addEventListener("click", () => elements.gcodeDialog.close());
+  elements.moveLibraryClose.addEventListener("click", () => elements.moveLibraryDialog.close());
+  elements.moveLibraryCancel.addEventListener("click", () => elements.moveLibraryDialog.close());
+  elements.moveLibraryDialog.addEventListener("close", () => {
+    moveLibraryFileName = null;
+    elements.moveLibraryStatus.textContent = "";
+  });
+  elements.moveLibraryForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = moveLibraryFileName;
+    const targetId = elements.moveLibraryTarget.value;
+    if (!name || !targetId) {
+      return;
+    }
+    if (await moveFileToLibrary(name, targetId)) {
+      elements.moveLibraryDialog.close();
+    }
+  });
   elements.gcodeForm.addEventListener("submit", (event) => {
     event.preventDefault();
     try {

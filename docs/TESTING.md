@@ -26,7 +26,7 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - Selected-file BCC validation, line blocking, ACK/NAK retransmission, and ETX/EOT completion.
 - Incoming TNC file headers, valid/invalid block BCCs, ACK/NAK responses, and commit-on-ETX behavior.
 - IndexedDB persistence, binary-exact retrieval, and duplicate-name handling.
-- IndexedDB library creation, active-set filtering, automatic migration of existing files, renaming, and safe deletion.
+- IndexedDB library creation, active-set filtering, file moves, automatic migration of existing files, renaming, and safe deletion.
 - Fragmented TNC delete-command parsing and idempotent bundled-file seeding.
 - Multi-format filename-to-FE1 type mapping and imported-file storage.
 - G-code linear/arc conversion, unsupported-instruction reporting, structural validation, and auto-numbering.

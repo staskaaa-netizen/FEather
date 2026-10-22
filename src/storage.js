@@ -172,6 +172,35 @@
       return this.saveUnique(name, value, reservedNames, "import", libraryId);
     }
 
+    async moveToLibrary(name, targetLibraryId) {
+      const state = await this.initializeLibraries();
+      if (!state.libraries.some((library) => library.id === targetLibraryId)) {
+        throw new Error("Destination library not found.");
+      }
+      const record = await this.get(name);
+      if (!record) {
+        throw new Error(`File not found: ${name}`);
+      }
+      if (record.libraryId === targetLibraryId) {
+        return record;
+      }
+      const targetRecords = await this.list(targetLibraryId);
+      if (targetRecords.some((item) => item.name.toLowerCase() === record.name.toLowerCase())) {
+        throw new Error(`The destination library already contains ${record.name}.`);
+      }
+      const updated = Object.assign({}, record, {
+        libraryId: targetLibraryId,
+        updatedAt: new Date().toISOString()
+      });
+      const db = await this.open();
+      const transaction = db.transaction(this.storeName, "readwrite");
+      const done = transactionDone(transaction);
+      transaction.objectStore(this.storeName).put(updated);
+      await done;
+      this.dispatchEvent(new CustomEvent("change", { detail: updated }));
+      return updated;
+    }
+
     async initialize(seedFiles, seedKey) {
       const db = await this.open();
       const marker = seedKey || "seed-v1";

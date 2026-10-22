@@ -59,7 +59,7 @@ Diagnostics and manual byte transmission are hidden from the main screen. Enable
 
 The file browser can contain multiple named libraries. Use the tabs to switch which program set is active; the TNC sees only files in that active library. Imports and TNC-to-browser uploads are saved into the active library. Existing files are migrated automatically into the default **Library 1** tab.
 
-Libraries can be created, renamed, and deleted. Deleting a library moves its files back to Library 1 rather than deleting them. Library changes are blocked during an active FE transfer so the directory cannot change in the middle of an operation.
+Programs can be moved between libraries by dragging a file row onto another tab, or with the row's **Move** action for keyboard and touch use. Moves preserve the filename and byte content and reject destination name collisions. Libraries can be created, renamed, and deleted. Deleting a library moves its files back to Library 1 rather than deleting them. Library changes are blocked during an active FE transfer so the directory cannot change in the middle of an operation.
 
 ### G-code converter scope
 

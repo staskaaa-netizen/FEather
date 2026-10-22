@@ -54,6 +54,13 @@
     await storage.saveImported("SECOND.H", [0x42], [], secondId);
     equal((await storage.list("default")).length, 1);
     equal((await storage.list(secondId)).length, 1);
+    const movedToDefault = await storage.moveToLibrary("SECOND.H", "default");
+    equal(movedToDefault.libraryId, "default");
+    equal((await storage.list("default")).length, 2);
+    equal((await storage.list(secondId)).length, 0);
+    await storage.moveToLibrary("SECOND.H", secondId);
+    equal((await storage.list("default")).length, 1);
+    equal((await storage.list(secondId)).length, 1);
 
     const renamed = await storage.renameLibrary(secondId, "Workshop");
     equal(renamed.find((library) => library.id === secondId).name, "Workshop");

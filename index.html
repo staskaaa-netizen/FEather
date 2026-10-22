@@ -207,6 +207,11 @@
       background: var(--accent);
       color: #17120a;
     }
+    .library-tab.drop-target {
+      border-color: var(--cyan);
+      background: rgba(100, 200, 215, 0.16);
+      color: var(--text);
+    }
     .library-actions { display: flex; gap: 4px; flex: 0 0 auto; }
     .library-actions button { padding: 5px 7px; font-size: 10px; }
     .library-status {
@@ -262,6 +267,8 @@
     }
     .file-row:first-child { border-top: 0; }
     .file-row:hover { background: rgba(100,200,215,0.05); }
+    .file-row[draggable="true"] { cursor: grab; }
+    .file-row.dragging { opacity: 0.45; }
     .file-row.selected {
       background: rgba(242,181,68,0.09);
       box-shadow: inset 3px 0 var(--accent);
@@ -705,6 +712,25 @@
       <div class="dialog-actions">
         <button id="gcodeCancelButton" type="button">Cancel</button>
         <button class="primary" type="submit">Convert</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="moveLibraryDialog" class="settings-dialog">
+    <form id="moveLibraryForm">
+      <div class="dialog-head">
+        <h2>Move program</h2>
+        <button id="moveLibraryCloseButton" type="button">Close</button>
+      </div>
+      <div class="dialog-body">
+        <p id="moveLibraryFile" class="hint" style="margin-top:0"></p>
+        <label for="moveLibraryTarget">Destination library</label>
+        <select id="moveLibraryTarget"></select>
+        <p id="moveLibraryStatus" class="hint" aria-live="polite"></p>
+      </div>
+      <div class="dialog-actions">
+        <button id="moveLibraryCancelButton" type="button">Cancel</button>
+        <button class="primary" type="submit">Move</button>
       </div>
     </form>
   </dialog>

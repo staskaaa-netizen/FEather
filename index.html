@@ -164,6 +164,56 @@
     .panel-body { padding: 14px; }
     .file-browser { display: flex; flex-direction: column; }
     .file-browser .panel-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .library-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .library-tabs {
+      display: flex;
+      gap: 4px;
+      min-width: 0;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .library-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      padding: 6px 9px;
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .library-tab span {
+      min-width: 17px;
+      padding: 1px 4px;
+      border-radius: 8px;
+      background: #252d31;
+      color: #aebbc0;
+      font-size: 9px;
+      text-align: center;
+    }
+    .library-tab.active {
+      border-color: #4b5a61;
+      background: #1d2529;
+      color: var(--text);
+    }
+    .library-tab.active span {
+      background: var(--accent);
+      color: #17120a;
+    }
+    .library-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+    .library-actions button { padding: 5px 7px; font-size: 10px; }
+    .library-status {
+      color: var(--muted);
+      font-size: 10px;
+      margin: -2px 0 9px;
+    }
     .drop-zone {
       display: grid;
       place-items: center;
@@ -485,6 +535,17 @@
           <span id="storedSummary" class="log-meta">0 files</span>
         </div>
         <div class="panel-body">
+          <div class="library-bar">
+            <div id="libraryTabs" class="library-tabs" role="tablist" aria-label="Program libraries"></div>
+            <div class="library-actions">
+              <button id="addLibraryButton" type="button">+ New</button>
+              <button id="renameLibraryButton" type="button">Rename</button>
+              <button id="deleteLibraryButton" type="button" class="danger">Delete</button>
+            </div>
+          </div>
+          <p id="libraryStatus" class="library-status" aria-live="polite">
+            Select a library to control which files are shared with the TNC.
+          </p>
           <div id="fileDropZone" class="drop-zone" tabindex="0" role="button" aria-label="Browse or drop NC files">
             <strong>Drop NC files here</strong>
             <span>.H, .I, .T, .D, .P and .A files are imported byte-for-byte.</span>

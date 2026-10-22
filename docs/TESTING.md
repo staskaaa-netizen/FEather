@@ -4,7 +4,7 @@ Document status: 20 October 2026. Transport and FE1 directory tested on the targ
 
 ## Automated browser tests
 
-Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 45 tests:
+Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite currently contains 46 tests:
 
 - Hex parsing, control-character naming, and diagnostic export.
 - Configurable endpoint validation.
@@ -26,6 +26,7 @@ Open `tests/test-runner.html` in Firefox or a Chromium browser. The suite curren
 - Selected-file BCC validation, line blocking, ACK/NAK retransmission, and ETX/EOT completion.
 - Incoming TNC file headers, valid/invalid block BCCs, ACK/NAK responses, and commit-on-ETX behavior.
 - IndexedDB persistence, binary-exact retrieval, and duplicate-name handling.
+- IndexedDB library creation, active-set filtering, automatic migration of existing files, renaming, and safe deletion.
 - Fragmented TNC delete-command parsing and idempotent bundled-file seeding.
 - Multi-format filename-to-FE1 type mapping and imported-file storage.
 - G-code linear/arc conversion, unsupported-instruction reporting, structural validation, and auto-numbering.

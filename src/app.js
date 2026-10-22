@@ -3,6 +3,7 @@
 
   const {
     ByteStreamBuffer,
+    DEFAULT_LIBRARY_ID,
     DiagnosticLog,
     Fe1DirectoryResponder,
     Fe1DeleteResponder,
@@ -69,6 +70,11 @@
     currentProgram: byId("currentProgram"),
     storedFileList: byId("storedFileList"),
     storedSummary: byId("storedSummary"),
+    libraryTabs: byId("libraryTabs"),
+    libraryStatus: byId("libraryStatus"),
+    addLibrary: byId("addLibraryButton"),
+    renameLibrary: byId("renameLibraryButton"),
+    deleteLibrary: byId("deleteLibraryButton"),
     filePreviewName: byId("filePreviewName"),
     filePreviewMeta: byId("filePreviewMeta"),
     filePreview: byId("filePreview"),
@@ -105,6 +111,8 @@
   const storage = new NcStorage();
   const receiveBuffer = new ByteStreamBuffer({ maxBytes: 4 * 1024 * 1024 });
   let storedRecords = [];
+  let libraries = [];
+  let activeLibraryId = null;
   let selectedFileName = null;
   let editContext = null;
   let renumberTimer = null;
@@ -217,7 +225,12 @@
     onComplete: async (result) => {
       try {
         const reservedNames = directoryFiles.map((file) => file.name);
-        const record = await storage.saveReceived(result.filename, result.bytes, reservedNames);
+        const record = await storage.saveReceived(
+          result.filename,
+          result.bytes,
+          reservedNames,
+          activeLibraryId
+        );
         selectedFileName = record.name;
         await refreshStoredFiles();
         setTransferActive(false);
@@ -250,7 +263,7 @@
     onDelete: async (identifier) => {
       const filename = fromFe1DirectoryName(identifier);
       const existing = await storage.get(filename);
-      if (!existing) {
+      if (!existing || existing.libraryId !== activeLibraryId) {
         throw new Error(`External file does not exist: ${identifier}`);
       }
       await storage.remove(filename);
@@ -513,6 +526,7 @@
         recordName: record.name,
         saveName: record.name,
         source: record.source,
+        libraryId: record.libraryId,
         dirty: false
       });
     } catch (error) {
@@ -579,6 +593,7 @@
       recordName: null,
       saveName: "PROGRAM.H",
       source: "import",
+      libraryId: activeLibraryId,
       warnings: [],
       dirty: true
     }, context || {});
@@ -623,10 +638,18 @@
       const bytes = new TextEncoder().encode(text);
       let saved;
       if (editContext.recordName) {
-        saved = await storage.save(editContext.recordName, bytes, { source: editContext.source });
+        saved = await storage.save(editContext.recordName, bytes, {
+          source: editContext.source,
+          libraryId: editContext.libraryId || activeLibraryId
+        });
       } else {
         const reserved = storedRecords.map((record) => record.name);
-        saved = await storage.saveImported(editContext.saveName, bytes, reserved);
+        saved = await storage.saveImported(
+          editContext.saveName,
+          bytes,
+          reserved,
+          activeLibraryId
+        );
       }
       selectedFileName = saved.name;
       editContext = null;
@@ -668,6 +691,133 @@
     editContext.dirty = editContext.originalText === null || elements.fileEditor.value !== editContext.originalText;
     elements.filePreviewName.textContent = `${editContext.saveName}${editContext.dirty ? " *" : ""}`;
     elements.fileEditor.focus();
+  }
+
+  function renderLibraryTabs(allRecords) {
+    const counts = new Map();
+    for (const record of allRecords || []) {
+      counts.set(record.libraryId, (counts.get(record.libraryId) || 0) + 1);
+    }
+    elements.libraryTabs.replaceChildren();
+    for (const library of libraries) {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "library-tab";
+      tab.dataset.libraryId = library.id;
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(library.id === activeLibraryId));
+      tab.classList.toggle("active", library.id === activeLibraryId);
+      tab.textContent = library.name;
+      const count = document.createElement("span");
+      count.textContent = String(counts.get(library.id) || 0);
+      tab.append(count);
+      tab.addEventListener("click", () => switchLibrary(library.id));
+      elements.libraryTabs.append(tab);
+    }
+    const active = libraries.find((library) => library.id === activeLibraryId);
+    elements.libraryStatus.textContent = active
+      ? `Only files in "${active.name}" are shared with the TNC.`
+      : "Select a library to control which files are shared with the TNC.";
+    elements.deleteLibrary.disabled = activeLibraryId === DEFAULT_LIBRARY_ID;
+    elements.renameLibrary.disabled = !active;
+  }
+
+  async function switchLibrary(id) {
+    if (id === activeLibraryId) {
+      return;
+    }
+    if (session.transferActive) {
+      showError("Wait for the active FE transfer to finish before changing libraries.");
+      return;
+    }
+    if (editContext?.dirty && !window.confirm("Discard unsaved changes and switch library?")) {
+      return;
+    }
+    try {
+      await storage.setActiveLibrary(id);
+      activeLibraryId = id;
+      selectedFileName = null;
+      editContext = null;
+      setEditingMode(false);
+      await refreshStoredFiles();
+      clearError();
+      diagnostics.add("SYSTEM", null, {
+        label: `Active library: ${libraries.find((library) => library.id === id).name}`
+      });
+    } catch (error) {
+      showError("Could not switch libraries.", error);
+    }
+  }
+
+  async function addLibrary() {
+    if (session.transferActive) {
+      showError("Wait for the active FE transfer to finish before adding a library.");
+      return;
+    }
+    const name = window.prompt("New library name", `Library ${libraries.length + 1}`);
+    if (name === null) {
+      return;
+    }
+    try {
+      const result = await storage.createLibrary(name);
+      libraries = result.libraries;
+      await storage.setActiveLibrary(result.library.id);
+      activeLibraryId = result.library.id;
+      selectedFileName = null;
+      editContext = null;
+      setEditingMode(false);
+      await refreshStoredFiles();
+      clearError();
+    } catch (error) {
+      showError("Could not create the library.", error);
+    }
+  }
+
+  async function renameActiveLibrary() {
+    const active = libraries.find((library) => library.id === activeLibraryId);
+    if (!active) {
+      return;
+    }
+    const name = window.prompt("Rename library", active.name);
+    if (name === null || name === active.name) {
+      return;
+    }
+    try {
+      libraries = await storage.renameLibrary(active.id, name);
+      await refreshStoredFiles();
+      clearError();
+    } catch (error) {
+      showError("Could not rename the library.", error);
+    }
+  }
+
+  async function deleteActiveLibrary() {
+    const active = libraries.find((library) => library.id === activeLibraryId);
+    if (!active || active.id === DEFAULT_LIBRARY_ID) {
+      return;
+    }
+    if (session.transferActive) {
+      showError("Wait for the active FE transfer to finish before deleting a library.");
+      return;
+    }
+    const fallback = libraries.find((library) => library.id === DEFAULT_LIBRARY_ID);
+    if (!window.confirm(
+      `Delete library "${active.name}"? Its files will be moved to "${fallback ? fallback.name : "Library 1"}".`
+    )) {
+      return;
+    }
+    try {
+      const result = await storage.deleteLibrary(active.id);
+      libraries = result.libraries;
+      activeLibraryId = result.activeLibraryId;
+      selectedFileName = null;
+      editContext = null;
+      setEditingMode(false);
+      await refreshStoredFiles();
+      clearError();
+    } catch (error) {
+      showError("Could not delete the library.", error);
+    }
   }
 
   function selectStoredFile(name) {
@@ -756,7 +906,9 @@
   }
 
   async function refreshStoredFiles() {
-    const records = await storage.list();
+    const allRecords = await storage.list();
+    renderLibraryTabs(allRecords);
+    const records = allRecords.filter((record) => record.libraryId === activeLibraryId);
     renderStoredFiles(records);
     const files = [];
     programBytes.clear();
@@ -776,7 +928,15 @@
   }
 
   async function initializeStoredFiles() {
+    const state = await storage.initializeLibraries();
+    libraries = state.libraries;
+    activeLibraryId = state.activeLibraryId;
     await refreshStoredFiles();
+    if (storage.lastLibraryMigrationCount > 0) {
+      diagnostics.add("SYSTEM", null, {
+        label: `Migrated ${storage.lastLibraryMigrationCount} files into ${libraries[0].name}`
+      });
+    }
   }
 
   async function importFiles(fileList) {
@@ -806,7 +966,7 @@
         }
         const bytes = new Uint8Array(await file.arrayBuffer());
         const reserved = (await storage.list()).map((record) => record.name);
-        const saved = await storage.saveImported(file.name, bytes, reserved);
+        const saved = await storage.saveImported(file.name, bytes, reserved, activeLibraryId);
         imported.push(saved.name);
         diagnostics.add("SYSTEM", null, {
           label: `Imported ${file.name} as ${saved.name} (${bytes.byteLength} bytes)`
@@ -1272,6 +1432,9 @@
       elements.settings.close();
     }
   });
+  elements.addLibrary.addEventListener("click", addLibrary);
+  elements.renameLibrary.addEventListener("click", renameActiveLibrary);
+  elements.deleteLibrary.addEventListener("click", deleteActiveLibrary);
   elements.browseFiles.addEventListener("click", (event) => {
     event.stopPropagation();
     elements.fileInput.click();

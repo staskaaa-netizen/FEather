@@ -34,5 +34,36 @@
     reopened.close();
     indexedDB.deleteDatabase(dbName);
   });
+
+  test("IndexedDB libraries migrate existing files and scope active sets", async () => {
+    const dbName = `tncweb-library-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const storage = new NcStorage({ dbName });
+    await storage.save("LEGACY.H", [0x41], { source: "test" });
+
+    const initial = await storage.initializeLibraries();
+    equal(initial.libraries.length, 1);
+    equal(initial.activeLibraryId, "default");
+    const migrated = await storage.list("default");
+    equal(migrated.length, 1);
+    equal(migrated[0].libraryId, "default");
+
+    const created = await storage.createLibrary("Production");
+    const secondId = created.library.id;
+    equal(created.libraries.length, 2);
+    await storage.setActiveLibrary(secondId);
+    await storage.saveImported("SECOND.H", [0x42], [], secondId);
+    equal((await storage.list("default")).length, 1);
+    equal((await storage.list(secondId)).length, 1);
+
+    const renamed = await storage.renameLibrary(secondId, "Workshop");
+    equal(renamed.find((library) => library.id === secondId).name, "Workshop");
+    const removed = await storage.deleteLibrary(secondId);
+    equal(removed.activeLibraryId, "default");
+    equal((await storage.list("default")).length, 2);
+    equal((await storage.list(secondId)).length, 0);
+
+    storage.close();
+    indexedDB.deleteDatabase(dbName);
+  });
 })(window);
 

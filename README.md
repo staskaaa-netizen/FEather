@@ -40,6 +40,7 @@ Implemented behavior includes:
 - TNC-to-browser block reception with BCC validation, ACK/NAK, and atomic IndexedDB commit after ETX.
 - A persistent received-file list with Download and Delete controls.
 - Multi-file Browse and drag-and-drop import with byte-exact IndexedDB storage.
+- Named IndexedDB program libraries with tabs; only the active library is exposed in the TNC's FE1 directory.
 - TNC-requested deletion with an updated external directory handshake.
 - A compact primary workspace with diagnostics hidden by default.
 - A Settings dialog for W610 endpoint, timeout, local-network discovery, log view, and diagnostic visibility.
@@ -53,6 +54,12 @@ Implemented behavior includes:
 Export-all/restore, rename/replace, full quota handling, and interrupted-transfer recovery are not yet claimed.
 
 Diagnostics and manual byte transmission are hidden from the main screen. Enable **Show diagnostic terminal** in Settings when raw traffic is required. File contents remain in IndexedDB; connection and display preferences use `localStorage`.
+
+### Program libraries
+
+The file browser can contain multiple named libraries. Use the tabs to switch which program set is active; the TNC sees only files in that active library. Imports and TNC-to-browser uploads are saved into the active library. Existing files are migrated automatically into the default **Library 1** tab.
+
+Libraries can be created, renamed, and deleted. Deleting a library moves its files back to Library 1 rather than deleting them. Library changes are blocked during an active FE transfer so the directory cannot change in the middle of an operation.
 
 ### G-code converter scope
 
@@ -125,7 +132,7 @@ Open [tests/test-runner.html](tests/test-runner.html), or run it headlessly with
   'file:///C:/acc/FEather/tests/test-runner.html'
 ```
 
-The expected result is `45 passed, 0 failed`.
+The expected result is `46 passed, 0 failed`.
 
 ## Documentation
 

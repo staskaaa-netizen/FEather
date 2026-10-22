@@ -2,6 +2,9 @@
   "use strict";
 
   const TNCWeb = global.TNCWeb = global.TNCWeb || {};
+  const DEFAULT_LIBRARY_ID = "default";
+  const LIBRARIES_META_KEY = "libraries-v1";
+  const ACTIVE_LIBRARY_META_KEY = "active-library-v1";
 
   function requestResult(request) {
     return new Promise((resolve, reject) => {
@@ -23,6 +26,21 @@
       throw new TypeError("Filename contains unsupported characters.");
     }
     return name;
+  }
+
+  function validateLibraryName(name) {
+    const normalized = String(name || "").trim().replace(/\s+/g, " ");
+    if (normalized.length < 1 || normalized.length > 32 || !/^[A-Za-z0-9 _.-]+$/.test(normalized)) {
+      throw new TypeError("Library names must be 1-32 letters, numbers, spaces, dots, dashes, or underscores.");
+    }
+    return normalized;
+  }
+
+  function makeLibraryId() {
+    if (global.crypto && typeof global.crypto.randomUUID === "function") {
+      return global.crypto.randomUUID();
+    }
+    return `library-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   function duplicateName(name, usedNames) {
@@ -79,13 +97,33 @@
       return this.openPromise;
     }
 
-    async list() {
+    async getMeta(key) {
+      const db = await this.open();
+      const transaction = db.transaction("meta", "readonly");
+      const done = transactionDone(transaction);
+      const record = await requestResult(transaction.objectStore("meta").get(key));
+      await done;
+      return record ? record.value : null;
+    }
+
+    async setMeta(key, value) {
+      const db = await this.open();
+      const transaction = db.transaction("meta", "readwrite");
+      const done = transactionDone(transaction);
+      transaction.objectStore("meta").put({ key, value });
+      await done;
+    }
+
+    async list(libraryId) {
       const db = await this.open();
       const transaction = db.transaction(this.storeName, "readonly");
       const done = transactionDone(transaction);
       const records = await requestResult(transaction.objectStore(this.storeName).getAll());
       await done;
-      return records.sort((left, right) => left.name.localeCompare(right.name, "en"));
+      const filtered = libraryId
+        ? records.filter((record) => record.libraryId === libraryId)
+        : records;
+      return filtered.sort((left, right) => left.name.localeCompare(right.name, "en"));
     }
 
     async get(name) {
@@ -114,23 +152,24 @@
       return record;
     }
 
-    async saveUnique(name, value, reservedNames, source) {
+    async saveUnique(name, value, reservedNames, source, libraryId) {
       const records = await this.list();
       const used = new Set(records.map((record) => record.name.toLowerCase()));
       for (const reserved of reservedNames || []) {
         used.add(String(reserved).toLowerCase());
       }
       return this.save(duplicateName(validateFilename(name), used), value, {
-        source: source || "import"
+        source: source || "import",
+        libraryId: libraryId || DEFAULT_LIBRARY_ID
       });
     }
 
-    async saveReceived(name, value, reservedNames) {
-      return this.saveUnique(name, value, reservedNames, "tnc");
+    async saveReceived(name, value, reservedNames, libraryId) {
+      return this.saveUnique(name, value, reservedNames, "tnc", libraryId);
     }
 
-    async saveImported(name, value, reservedNames) {
-      return this.saveUnique(name, value, reservedNames, "import");
+    async saveImported(name, value, reservedNames, libraryId) {
+      return this.saveUnique(name, value, reservedNames, "import", libraryId);
     }
 
     async initialize(seedFiles, seedKey) {
@@ -147,7 +186,10 @@
         const bytes = TNCWeb.copyBytes(file.bytes);
         const existing = await this.get(file.name);
         if (!existing) {
-          await this.save(file.name, bytes, { source: "bundled" });
+          await this.save(file.name, bytes, {
+            source: "bundled",
+            libraryId: file.libraryId || DEFAULT_LIBRARY_ID
+          });
         }
       }
       const markerWrite = db.transaction("meta", "readwrite");
@@ -156,6 +198,128 @@
       await markerWriteDone;
       this.dispatchEvent(new CustomEvent("change", {}));
       return true;
+    }
+
+    async initializeLibraries() {
+      const db = await this.open();
+      let libraries = await this.getMeta(LIBRARIES_META_KEY);
+      if (!Array.isArray(libraries) || libraries.length === 0) {
+        libraries = [{
+          id: DEFAULT_LIBRARY_ID,
+          name: "Library 1",
+          createdAt: new Date().toISOString()
+        }];
+      }
+      libraries = libraries.filter((library) => library && library.id && library.name);
+      if (!libraries.some((library) => library.id === DEFAULT_LIBRARY_ID)) {
+        libraries.unshift({
+          id: DEFAULT_LIBRARY_ID,
+          name: "Library 1",
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      let activeLibraryId = await this.getMeta(ACTIVE_LIBRARY_META_KEY);
+      if (!libraries.some((library) => library.id === activeLibraryId)) {
+        activeLibraryId = libraries[0].id;
+      }
+
+      const transaction = db.transaction([this.storeName, "meta"], "readwrite");
+      const done = transactionDone(transaction);
+      const fileStore = transaction.objectStore(this.storeName);
+      const metaStore = transaction.objectStore("meta");
+      const allRequest = fileStore.getAll();
+      allRequest.addEventListener("success", () => {
+        let migrated = 0;
+        for (const record of allRequest.result) {
+          if (!record.libraryId) {
+            fileStore.put(Object.assign({}, record, { libraryId: DEFAULT_LIBRARY_ID }));
+            migrated += 1;
+          }
+        }
+        metaStore.put({ key: LIBRARIES_META_KEY, value: libraries });
+        metaStore.put({ key: ACTIVE_LIBRARY_META_KEY, value: activeLibraryId });
+        this.lastLibraryMigrationCount = migrated;
+      });
+      await done;
+      return { libraries, activeLibraryId };
+    }
+
+    async createLibrary(name) {
+      const state = await this.initializeLibraries();
+      const libraryName = validateLibraryName(name);
+      if (state.libraries.some((library) => library.name.toLowerCase() === libraryName.toLowerCase())) {
+        throw new Error(`A library named "${libraryName}" already exists.`);
+      }
+      const library = {
+        id: makeLibraryId(),
+        name: libraryName,
+        createdAt: new Date().toISOString()
+      };
+      const libraries = state.libraries.concat(library);
+      await this.setMeta(LIBRARIES_META_KEY, libraries);
+      this.dispatchEvent(new CustomEvent("librarieschange", { detail: { libraries } }));
+      return { library, libraries };
+    }
+
+    async renameLibrary(id, name) {
+      const state = await this.initializeLibraries();
+      const libraryName = validateLibraryName(name);
+      const current = state.libraries.find((library) => library.id === id);
+      if (!current) {
+        throw new Error("Library not found.");
+      }
+      if (state.libraries.some(
+        (library) => library.id !== id && library.name.toLowerCase() === libraryName.toLowerCase()
+      )) {
+        throw new Error(`A library named "${libraryName}" already exists.`);
+      }
+      const libraries = state.libraries.map((library) => (
+        library.id === id ? Object.assign({}, library, { name: libraryName }) : library
+      ));
+      await this.setMeta(LIBRARIES_META_KEY, libraries);
+      this.dispatchEvent(new CustomEvent("librarieschange", { detail: { libraries } }));
+      return libraries;
+    }
+
+    async deleteLibrary(id) {
+      const state = await this.initializeLibraries();
+      if (id === DEFAULT_LIBRARY_ID) {
+        throw new Error("The default library cannot be deleted.");
+      }
+      if (!state.libraries.some((library) => library.id === id)) {
+        throw new Error("Library not found.");
+      }
+      const libraries = state.libraries.filter((library) => library.id !== id);
+      const activeLibraryId = state.activeLibraryId === id ? DEFAULT_LIBRARY_ID : state.activeLibraryId;
+      const db = await this.open();
+      const transaction = db.transaction([this.storeName, "meta"], "readwrite");
+      const done = transactionDone(transaction);
+      const fileStore = transaction.objectStore(this.storeName);
+      const metaStore = transaction.objectStore("meta");
+      const allRequest = fileStore.getAll();
+      allRequest.addEventListener("success", () => {
+        for (const record of allRequest.result) {
+          if (record.libraryId === id) {
+            fileStore.put(Object.assign({}, record, { libraryId: DEFAULT_LIBRARY_ID }));
+          }
+        }
+        metaStore.put({ key: LIBRARIES_META_KEY, value: libraries });
+        metaStore.put({ key: ACTIVE_LIBRARY_META_KEY, value: activeLibraryId });
+      });
+      await done;
+      this.dispatchEvent(new CustomEvent("librarieschange", { detail: { libraries } }));
+      return { libraries, activeLibraryId };
+    }
+
+    async setActiveLibrary(id) {
+      const state = await this.initializeLibraries();
+      if (!state.libraries.some((library) => library.id === id)) {
+        throw new Error("Library not found.");
+      }
+      await this.setMeta(ACTIVE_LIBRARY_META_KEY, id);
+      this.dispatchEvent(new CustomEvent("librarychange", { detail: { id } }));
+      return id;
     }
 
     async remove(name) {
@@ -186,7 +350,9 @@
   }
 
   Object.assign(TNCWeb, {
+    DEFAULT_LIBRARY_ID,
     NcStorage,
-    duplicateName
+    duplicateName,
+    validateLibraryName
   });
 })(window);
